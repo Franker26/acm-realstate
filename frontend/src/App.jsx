@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useReducer, useRef } from 'react'
-import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom'
+import React, { createContext, useContext, useReducer, useRef, useState } from 'react'
+import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import NuevaTasacion from './pages/NuevaTasacion.jsx'
 import TipoACM from './pages/TipoACM.jsx'
 import AgregarComparables from './pages/AgregarComparables.jsx'
@@ -7,6 +7,49 @@ import AplicarPonderadores from './pages/AplicarPonderadores.jsx'
 import ResultadosDashboard from './pages/ResultadosDashboard.jsx'
 import ExportarPDF from './pages/ExportarPDF.jsx'
 import Home from './pages/Home.jsx'
+import Login from './pages/Login.jsx'
+import { loginUser } from './api.js'
+
+// --- Auth ---
+
+const AuthContext = createContext(null)
+
+export function useAuth() {
+  return useContext(AuthContext)
+}
+
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('acm_user')) } catch { return null }
+  })
+
+  async function login(username, password) {
+    const data = await loginUser(username, password)
+    localStorage.setItem('acm_token', data.access_token)
+    const u = { username: data.username, is_admin: data.is_admin }
+    localStorage.setItem('acm_user', JSON.stringify(u))
+    setUser(u)
+  }
+
+  function logout() {
+    localStorage.removeItem('acm_token')
+    localStorage.removeItem('acm_user')
+    setUser(null)
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+function PrivateRoute({ children }) {
+  const { user } = useAuth()
+  return user ? children : <Navigate to="/login" replace />
+}
+
+// --- Wizard ---
 
 const initialState = {
   acmId: null,
@@ -90,17 +133,45 @@ export function WizardNav({ currentStep }) {
   return <WizardNavInner currentStep={currentStep} />
 }
 
+function AppHeader() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    logout()
+    navigate('/login')
+  }
+
+  return (
+    <header className="app-header">
+      <Link to="/" className="app-title">ACM Real Estate</Link>
+      {user && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13 }}>
+          <span style={{ color: '#b0c4de' }}>{user.username}</span>
+          <button
+            onClick={handleLogout}
+            style={{ background: 'none', border: '1px solid #b0c4de', color: '#b0c4de', borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 12 }}
+          >
+            Salir
+          </button>
+        </div>
+      )}
+    </header>
+  )
+}
+
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/acm/tipo" element={<TipoACM />} />
-      <Route path="/acm/new" element={<NuevaTasacion />} />
-      <Route path="/acm/:id/step/1" element={<NuevaTasacion />} />
-      <Route path="/acm/:id/step/2" element={<AgregarComparables />} />
-      <Route path="/acm/:id/step/3" element={<AplicarPonderadores />} />
-      <Route path="/acm/:id/step/4" element={<ResultadosDashboard />} />
-      <Route path="/acm/:id/step/5" element={<ExportarPDF />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
+      <Route path="/acm/tipo" element={<PrivateRoute><TipoACM /></PrivateRoute>} />
+      <Route path="/acm/new" element={<PrivateRoute><NuevaTasacion /></PrivateRoute>} />
+      <Route path="/acm/:id/step/1" element={<PrivateRoute><NuevaTasacion /></PrivateRoute>} />
+      <Route path="/acm/:id/step/2" element={<PrivateRoute><AgregarComparables /></PrivateRoute>} />
+      <Route path="/acm/:id/step/3" element={<PrivateRoute><AplicarPonderadores /></PrivateRoute>} />
+      <Route path="/acm/:id/step/4" element={<PrivateRoute><ResultadosDashboard /></PrivateRoute>} />
+      <Route path="/acm/:id/step/5" element={<PrivateRoute><ExportarPDF /></PrivateRoute>} />
     </Routes>
   )
 }
@@ -108,14 +179,14 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <WizardProvider>
-        <header className="app-header">
-          <Link to="/" className="app-title">ACM Real Estate</Link>
-        </header>
-        <main className="app-main">
-          <AppRoutes />
-        </main>
-      </WizardProvider>
+      <AuthProvider>
+        <WizardProvider>
+          <AppHeader />
+          <main className="app-main">
+            <AppRoutes />
+          </main>
+        </WizardProvider>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

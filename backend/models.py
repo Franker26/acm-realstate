@@ -1,4 +1,5 @@
 import enum
+import os
 from datetime import datetime
 
 from sqlalchemy import (
@@ -6,7 +7,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
-DATABASE_URL = "sqlite:////data/acm.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////data/acm.db")
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -117,3 +118,12 @@ class Comparable(Base):
     factor_amenities = Column(Float, nullable=True)
 
     acm = relationship("ACM", back_populates="comparables")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    hashed_password = Column(String, nullable=False)
+    is_admin = Column(Boolean, default=False)

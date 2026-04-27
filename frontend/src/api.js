@@ -1,10 +1,21 @@
+function getToken() {
+  return localStorage.getItem('acm_token')
+}
+
 async function request(method, path, body) {
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  }
+  const headers = { 'Content-Type': 'application/json' }
+  const token = getToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const opts = { method, headers }
   if (body !== undefined) opts.body = JSON.stringify(body)
   const res = await fetch(path, opts)
+  if (res.status === 401) {
+    // Token expirado: limpiar sesión y recargar al login
+    localStorage.removeItem('acm_token')
+    localStorage.removeItem('acm_user')
+    window.location.href = '/login'
+    throw new Error('Sesión expirada')
+  }
   if (!res.ok) {
     let detail = `HTTP ${res.status}`
     try {
@@ -14,6 +25,20 @@ async function request(method, path, body) {
     throw new Error(detail)
   }
   if (res.status === 204) return null
+  return res.json()
+}
+
+export async function loginUser(username, password) {
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  if (!res.ok) {
+    let detail = 'Error de autenticación'
+    try { detail = (await res.json()).detail || detail } catch {}
+    throw new Error(detail)
+  }
   return res.json()
 }
 

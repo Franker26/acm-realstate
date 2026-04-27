@@ -3,21 +3,73 @@ import json
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 from bs4 import BeautifulSoup
 from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel as PydanticBase
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel as PydanticBase
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 import calculator as calc
-from models import ACM, Base, Comparable, SessionLocal, engine
+from models import ACM, Base, Comparable, SessionLocal, User, engine
 from pdf_generator import generate_pdf
+
+# --- Auth config ---
+
+_SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-production")
+_ALGORITHM = "HS256"
+_TOKEN_EXPIRE_DAYS = 7
+_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "acm1234")
+
+_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Rutas que no requieren token
+_PUBLIC_PATHS = {"/api/auth/login", "/api/ponderadores/defaults"}
+
+
+def _hash_password(pw: str) -> str:
+    return _pwd_ctx.hash(pw)
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return _pwd_ctx.verify(plain, hashed)
+
+
+def _create_token(username: str) -> str:
+    exp = datetime.now(timezone.utc) + timedelta(days=_TOKEN_EXPIRE_DAYS)
+    return jwt.encode({"sub": username, "exp": exp}, _SECRET_KEY, algorithm=_ALGORITHM)
+
+
+def _decode_token(token: str) -> str:
+    payload = jwt.decode(token, _SECRET_KEY, algorithms=[_ALGORITHM])
+    username = payload.get("sub")
+    if not username:
+        raise JWTError("no sub")
+    return username
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in _PUBLIC_PATHS or not request.url.path.startswith("/api/"):
+            return await call_next(request)
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return JSONResponse({"detail": "No autenticado"}, status_code=401)
+        try:
+            _decode_token(auth.split(" ", 1)[1])
+        except JWTError:
+            return JSONResponse({"detail": "Token inválido o expirado"}, status_code=401)
+        return await call_next(request)
 from schemas import (
     ACMCreate,
     ACMRead,
@@ -53,12 +105,22 @@ async def lifespan(app: FastAPI):
                 conn.commit()
             except Exception:
                 pass  # columna ya existe
+    # Crear admin por defecto si no existe ningún usuario
+    with SessionLocal() as db:
+        if not db.query(User).first():
+            db.add(User(
+                username=_ADMIN_USERNAME,
+                hashed_password=_hash_password(_ADMIN_PASSWORD),
+                is_admin=True,
+            ))
+            db.commit()
     yield
 
 
 app = FastAPI(title="ACM Real Estate API", lifespan=lifespan)
 
 origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -74,6 +136,39 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# --- Auth endpoints ---
+
+class LoginRequest(PydanticBase):
+    username: str
+    password: str
+
+
+@app.post("/api/auth/login")
+def login(body: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == body.username).first()
+    if not user or not _verify_password(body.password, user.hashed_password):
+        raise HTTPException(401, "Usuario o contraseña incorrectos")
+    return {
+        "access_token": _create_token(user.username),
+        "token_type": "bearer",
+        "username": user.username,
+        "is_admin": user.is_admin,
+    }
+
+
+@app.get("/api/auth/me")
+def me(request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("Authorization", "").split(" ", 1)[-1]
+    try:
+        username = _decode_token(token)
+    except JWTError:
+        raise HTTPException(401, "Token inválido")
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(401, "Usuario no encontrado")
+    return {"username": user.username, "is_admin": user.is_admin}
 
 
 def _get_acm_or_404(acm_id: int, db: Session) -> ACM:
