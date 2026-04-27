@@ -13,6 +13,8 @@ spec:
       labels:
         app: frontend
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: atlas
       containers:
         - name: frontend
           image: ghcr.io/franker26/acm-frontend:latest
