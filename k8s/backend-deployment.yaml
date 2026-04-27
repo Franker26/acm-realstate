@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: ghcr.io/OWNER/acm-backend:latest
+          image: ghcr.io/franker26/acm-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
