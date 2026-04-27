@@ -1,9 +1,15 @@
 import io
+import json
 import os
+import re
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
+from bs4 import BeautifulSoup
 from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel as PydanticBase
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
@@ -336,3 +342,152 @@ def generate_acm_pdf(acm_id: int, body: PdfRequest, db: Session = Depends(get_db
 @app.get("/api/ponderadores/defaults", response_model=PonderadoresDefaults)
 def get_defaults():
     return PonderadoresDefaults(**calc.DEFAULTS)
+
+
+# --- Zonaprop extractor ---
+
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "es-AR,es;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+}
+
+
+def _parse_next_data(html: str) -> dict:
+    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.+?)</script>', html, re.DOTALL)
+    if not m:
+        return {}
+    try:
+        data = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return {}
+
+    page_props = data.get("props", {}).get("pageProps", {})
+
+    # Zonaprop wraps the listing under different keys depending on listing type
+    listing = None
+    for key in ("listing", "listingData", "posting", "propertyData"):
+        c = page_props.get(key)
+        if isinstance(c, dict) and c:
+            listing = c
+            break
+    if listing is None:
+        # Some pages nest it under initialData
+        initial = page_props.get("initialData", {})
+        for key in ("posting", "listing"):
+            c = initial.get(key) if isinstance(initial, dict) else None
+            if isinstance(c, dict) and c:
+                listing = c
+                break
+    if not listing:
+        return {}
+
+    result = {}
+
+    # Price (USD only)
+    price_obj = listing.get("price") or {}
+    if isinstance(price_obj, dict):
+        amount = price_obj.get("amount") or price_obj.get("value")
+        if amount and price_obj.get("currency", "USD") == "USD":
+            result["precio"] = int(float(amount))
+    if "precio" not in result:
+        for p in (listing.get("priceOperationType") or {}).get("prices", []):
+            if isinstance(p, dict) and p.get("currency") == "USD":
+                result["precio"] = int(float(p.get("amount", 0)))
+                break
+
+    # Address
+    for getter in [
+        lambda l: l.get("address"),
+        lambda l: (l.get("location") or {}).get("address", {}).get("name"),
+        lambda l: (l.get("location") or {}).get("fullLocation"),
+        lambda l: l.get("title"),
+    ]:
+        try:
+            v = getter(listing)
+            if isinstance(v, str) and v.strip():
+                result["direccion"] = v.strip()
+                break
+        except Exception:
+            pass
+
+    # Days on market (from publication date)
+    for key in ("createdOn", "publishDate", "publicationDate", "createdAt", "listingDate"):
+        pub_str = listing.get(key)
+        if isinstance(pub_str, str):
+            try:
+                pub = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                result["dias_mercado"] = max(0, (datetime.now(timezone.utc) - pub).days)
+                break
+            except Exception:
+                pass
+
+    return result
+
+
+def _parse_html_fallback(html: str) -> dict:
+    soup = BeautifulSoup(html, "html.parser")
+    result = {}
+
+    for qa in ("price", "PRICE", "posting-price", "POSTING_PRICE"):
+        el = soup.find(attrs={"data-qa": qa})
+        if el:
+            text_content = el.get_text(" ", strip=True)
+            # Extract numbers, remove thousands separators
+            nums = re.findall(r"[\d]+", text_content.replace(".", "").replace(",", ""))
+            for n in nums:
+                v = int(n)
+                if 1_000 < v < 100_000_000:
+                    result["precio"] = v
+                    break
+            if "precio" in result:
+                break
+
+    for qa in ("address", "location", "POSTING_LOCATION", "LOCATION", "posting-title"):
+        el = soup.find(attrs={"data-qa": qa})
+        if el:
+            t = el.get_text(" ", strip=True)
+            if t:
+                result["direccion"] = t
+                break
+
+    return result
+
+
+class ZonapropExtractRequest(PydanticBase):
+    url: str
+
+
+@app.post("/api/zonaprop/extract")
+async def extract_zonaprop(body: ZonapropExtractRequest):
+    url = body.url.strip()
+    if "zonaprop.com.ar" not in url:
+        raise HTTPException(400, "La URL debe ser de zonaprop.com.ar")
+
+    try:
+        async with httpx.AsyncClient(headers=_BROWSER_HEADERS, follow_redirects=True, timeout=20) as client:
+            r = await client.get(url)
+        if r.status_code == 403:
+            raise HTTPException(422, "Zonaprop bloqueó el acceso. Intentá de nuevo en unos segundos o ingresá los datos manualmente.")
+        r.raise_for_status()
+        html = r.text
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(422, f"No se pudo acceder a la URL: {e}")
+
+    result = _parse_next_data(html)
+    if not result:
+        result = _parse_html_fallback(html)
+
+    if not result:
+        raise HTTPException(
+            422,
+            "No se pudieron extraer datos de la página. Puede estar inactiva o el formato cambió.",
+        )
+
+    return result

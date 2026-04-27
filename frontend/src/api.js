@@ -34,6 +34,8 @@ export const getResultado = (acmId) => request('GET', `/api/acm/${acmId}/resulta
 
 export const getDefaults = () => request('GET', '/api/ponderadores/defaults')
 
+export const extractZonaprop = (url) => request('POST', '/api/zonaprop/extract', { url })
+
 export async function generatePDF(acmId, chartImageB64) {
   const res = await fetch(`/api/acm/${acmId}/pdf`, {
     method: 'POST',

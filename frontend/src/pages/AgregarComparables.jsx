@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { addComparable, deleteComparable, getACM, updateComparable } from '../api.js'
+import { addComparable, deleteComparable, extractZonaprop, getACM, updateComparable } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 import PropertyForm from '../components/PropertyForm.jsx'
 
@@ -61,6 +61,8 @@ export default function AgregarComparables() {
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [apiError, setApiError] = useState(null)
+  const [extracting, setExtracting] = useState(false)
+  const [extractError, setExtractError] = useState(null)
   const [showForm, setShowForm] = useState(true)
   const { dispatch } = useWizard()
   const navigate = useNavigate()
@@ -84,6 +86,25 @@ export default function AgregarComparables() {
     if (!v.superficie_cubierta || Number(v.superficie_cubierta) <= 0)
       err.superficie_cubierta = 'Debe ser mayor a 0'
     return err
+  }
+
+  async function handleExtract() {
+    if (!form.url || !form.url.includes('zonaprop.com.ar')) return
+    setExtracting(true)
+    setExtractError(null)
+    try {
+      const data = await extractZonaprop(form.url)
+      setForm((prev) => ({
+        ...prev,
+        ...(data.precio != null ? { precio: String(data.precio) } : {}),
+        ...(data.dias_mercado != null ? { dias_mercado: String(data.dias_mercado) } : {}),
+        ...(data.direccion ? { direccion: data.direccion } : {}),
+      }))
+    } catch (e) {
+      setExtractError(e.message)
+    } finally {
+      setExtracting(false)
+    }
   }
 
   async function handleSubmit(e) {
@@ -211,9 +232,28 @@ export default function AgregarComparables() {
             <div className="form-grid">
               <div className="form-group full">
                 <label>URL de publicación</label>
-                <input type="url" name="url" value={form.url} tabIndex={1}
-                  onChange={(e) => handleChange('url', e.target.value)}
-                  placeholder="https://www.zonaprop.com.ar/..." />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="url" name="url" value={form.url} tabIndex={1}
+                    style={{ flex: 1 }}
+                    onChange={(e) => { handleChange('url', e.target.value); setExtractError(null) }}
+                    placeholder="https://www.zonaprop.com.ar/..." />
+                  {form.url.includes('zonaprop.com.ar') && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleExtract}
+                      disabled={extracting}
+                      style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                    >
+                      {extracting ? <span className="spinner" /> : '⬇ Extraer datos'}
+                    </button>
+                  )}
+                </div>
+                {extractError && (
+                  <div className="alert alert-error" style={{ marginTop: 6, fontSize: 13 }}>
+                    {extractError}
+                  </div>
+                )}
               </div>
               <div className="form-group full">
                 <label>Dirección</label>
