@@ -15,12 +15,17 @@ export default function AddressAutocomplete({ value, onChange, placeholder, tabI
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const containerRef = useRef(null)
+  const justSelected = useRef(false)
   const debouncedQuery = useDebounce(query, 450)
 
   // Sync external value changes (e.g. form reset)
   useEffect(() => { setQuery(value || '') }, [value])
 
   useEffect(() => {
+    if (justSelected.current) {
+      justSelected.current = false
+      return
+    }
     if (!debouncedQuery || debouncedQuery.length < 4) {
       setSuggestions([])
       setOpen(false)
@@ -63,6 +68,7 @@ export default function AddressAutocomplete({ value, onChange, placeholder, tabI
 
   function select(s) {
     const label = formatLabel(s)
+    justSelected.current = true
     setQuery(label)
     onChange(label)
     setSuggestions([])

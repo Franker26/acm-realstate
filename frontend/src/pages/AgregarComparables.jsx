@@ -223,7 +223,7 @@ export default function AgregarComparables() {
               </div>
               <div className="form-group">
                 <label>Precio publicado (USD) *</label>
-                <input type="number" name="precio" min="1" step="100" tabIndex={3}
+                <input type="number" name="precio" min="1" step="1" tabIndex={3}
                   value={form.precio} onChange={(e) => handleChange('precio', e.target.value)} />
                 {errors.precio && <span className="error-msg">{errors.precio}</span>}
               </div>
@@ -235,7 +235,7 @@ export default function AgregarComparables() {
               <div className="form-group full">
                 <label>Oportunidad de mercado</label>
                 <div className="checkbox-row">
-                  <label>
+                  <label style={{ whiteSpace: 'nowrap' }}>
                     <input type="checkbox" tabIndex={5} checked={form.oportunidad_mercado}
                       onChange={(e) => handleChange('oportunidad_mercado', e.target.checked)} />
                     Precio competitivo (aplica ×0.95)

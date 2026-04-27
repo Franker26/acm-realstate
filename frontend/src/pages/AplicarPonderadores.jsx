@@ -305,6 +305,14 @@ export default function AplicarPonderadores() {
         }
         setFactorMap(initial)
         setRecommendMap(recoms)
+
+        const hasActiveAdv = acmData.comparables.some(comp =>
+          ADV_FACTORS.some(f => {
+            const v = comp[f.key]
+            return v != null && Math.abs(v - 1) > 0.001
+          })
+        )
+        if (hasActiveAdv) setAdvancedMode(true)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
@@ -352,7 +360,27 @@ export default function AplicarPonderadores() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
         <button
           className={`btn btn-sm ${advancedMode ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setAdvancedMode((v) => !v)}
+          onClick={() => {
+            if (advancedMode) {
+              const hasActive = comparables.some(comp =>
+                ADV_FACTORS.some(f => Math.abs((factorMap[comp.id]?.[f.key] ?? 1) - 1) > 0.001)
+              )
+              if (hasActive) {
+                if (!window.confirm(
+                  'Hay factores avanzados activos. Desactivar el modo avanzado los reseteará a 1.000 en todas las comparables. ¿Continuar?'
+                )) return
+                setFactorMap(prev => {
+                  const next = { ...prev }
+                  for (const comp of comparables) {
+                    next[comp.id] = { ...next[comp.id] }
+                    for (const f of ADV_FACTORS) next[comp.id][f.key] = 1
+                  }
+                  return next
+                })
+              }
+            }
+            setAdvancedMode(v => !v)
+          }}
         >
           ⚙ {advancedMode ? 'Modo avanzado activo' : 'Activar modo avanzado'}
         </button>
