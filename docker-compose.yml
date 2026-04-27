@@ -1,0 +1,17 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - acm-data:/data
+    environment:
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:80,http://localhost
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+
+volumes:
+  acm-data:

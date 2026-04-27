@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #222; padding: 20px; }
+  h1 { font-size: 18px; color: #1a3a5c; }
+  h2 { font-size: 13px; color: #1a3a5c; margin: 14px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+  .header-left h1 { margin-bottom: 4px; }
+  .header-meta { font-size: 10px; color: #555; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .field { margin-bottom: 4px; }
+  .field label { font-weight: bold; color: #444; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 10px; }
+  th { background: #1a3a5c; color: #fff; padding: 5px 4px; text-align: left; }
+  td { padding: 4px; border-bottom: 1px solid #ddd; }
+  tr:nth-child(even) td { background: #f5f8fb; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0; }
+  .kpi-box { border: 1px solid #ccc; border-radius: 4px; padding: 8px; text-align: center; }
+  .kpi-box .kpi-val { font-size: 16px; font-weight: bold; color: #1a3a5c; }
+  .kpi-box .kpi-label { font-size: 9px; color: #666; margin-top: 2px; }
+  .kpi-highlight { border-color: #1a3a5c; background: #eef4fb; }
+  .chart-section { margin: 12px 0; text-align: center; }
+  .chart-section img { max-width: 100%; height: auto; border: 1px solid #ddd; }
+  .notas { margin-top: 10px; border: 1px solid #ccc; padding: 8px; border-radius: 4px; min-height: 40px; }
+  .notas-label { font-weight: bold; margin-bottom: 4px; }
+  .footer { margin-top: 20px; font-size: 9px; color: #aaa; text-align: center; border-top: 1px solid #eee; padding-top: 8px; }
+  .tag { display: inline-block; background: #e0eaf5; color: #1a3a5c; border-radius: 3px; padding: 1px 5px; font-size: 9px; margin-right: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>ACM Real Estate</h1>
+    <div style="font-size:14px; font-weight:bold; margin:4px 0;">{{ acm.nombre }}</div>
+    <div class="header-meta">{{ acm.direccion }}</div>
+  </div>
+  <div class="header-meta" style="text-align:right;">
+    <div>Fecha: {{ fecha }}</div>
+    <div>Sup. cubierta: {{ acm.superficie_cubierta }} m²</div>
+  </div>
+</div>
+
+<h2>Propiedad Sujeto</h2>
+<div class="grid2">
+  <div class="field"><label>Dirección:</label> {{ acm.direccion }}</div>
+  <div class="field"><label>Tipo:</label> {{ acm.tipo }}</div>
+  <div class="field"><label>Sup. cubierta:</label> {{ acm.superficie_cubierta }} m²</div>
+  <div class="field"><label>Sup. descubierta:</label> {{ acm.superficie_descubierta or '—' }} m²</div>
+  <div class="field"><label>Piso:</label> {{ acm.piso or '—' }}</div>
+  <div class="field"><label>Antigüedad:</label> {{ acm.antiguedad or '—' }} años</div>
+  <div class="field"><label>Orientación:</label> {{ acm.orientacion or '—' }}</div>
+  <div class="field"><label>Estado:</label> {{ acm.estado or '—' }}</div>
+  <div class="field"><label>Calidad:</label> {{ acm.calidad or '—' }}</div>
+  <div class="field"><label>Distribución:</label> {{ acm.distribucion or '—' }}</div>
+  <div class="field">
+    {% if acm.cochera %}<span class="tag">Cochera</span>{% endif %}
+    {% if acm.pileta %}<span class="tag">Pileta</span>{% endif %}
+  </div>
+</div>
+
+<h2>KPIs de la Tasación</h2>
+<div class="kpis">
+  <div class="kpi-box">
+    <div class="kpi-val">USD {{ "%.0f"|format(resultado.mean_ajustado) }}</div>
+    <div class="kpi-label">Precio/m² promedio ajustado</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-val">USD {{ "%.0f"|format(resultado.median_ajustado) }}</div>
+    <div class="kpi-label">Mediana ajustada</div>
+  </div>
+  <div class="kpi-box kpi-highlight">
+    <div class="kpi-val">USD {{ "%.0f"|format(resultado.valor_estimado_sujeto) }}</div>
+    <div class="kpi-label">Valor estimado sujeto</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-val">USD {{ "%.0f"|format(resultado.min_ajustado) }}</div>
+    <div class="kpi-label">Mínimo ajustado</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-val">USD {{ "%.0f"|format(resultado.max_ajustado) }}</div>
+    <div class="kpi-label">Máximo ajustado</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-val">± {{ "%.0f"|format(resultado.std_ajustado) }}</div>
+    <div class="kpi-label">Desviación estándar</div>
+  </div>
+</div>
+
+<h2>Comparables</h2>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Dirección</th>
+      <th>Sup m²</th>
+      <th>Precio USD</th>
+      <th>USD/m² pub.</th>
+      <th>Factor total</th>
+      <th>USD/m² ajust.</th>
+      <th>Antig.</th>
+      <th>Piso</th>
+      <th>Estado</th>
+      <th>Calidad</th>
+      <th>Días merc.</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in resultado.comparables %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ c.direccion or c.url or '—' }}</td>
+      <td>{{ c.precio_m2_publicado|round(0)|int }}</td>
+      <td>{{ "%.0f"|format(c.precio) }}</td>
+      <td>{{ "%.0f"|format(c.precio_m2_publicado) }}</td>
+      <td>{{ "%.3f"|format(c.factor_total) }}</td>
+      <td><strong>{{ "%.0f"|format(c.precio_ajustado_m2) }}</strong></td>
+      {% set comp = acm.comparables[loop.index0] %}
+      <td>{{ comp.antiguedad or '—' }}</td>
+      <td>{{ comp.piso or '—' }}</td>
+      <td>{{ comp.estado or '—' }}</td>
+      <td>{{ comp.calidad or '—' }}</td>
+      <td>{{ comp.dias_mercado or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if chart_image_b64 %}
+<h2>Gráfico de Precios Ajustados</h2>
+<div class="chart-section">
+  <img src="{{ chart_image_b64 }}" alt="Gráfico de precios" />
+</div>
+{% endif %}
+
+{% if acm.notas %}
+<h2>Notas y Observaciones</h2>
+<div class="notas">{{ acm.notas }}</div>
+{% endif %}
+
+<div class="footer">ACM Real Estate · {{ acm.nombre }} · {{ fecha }}</div>
+
+</body>
+</html>
