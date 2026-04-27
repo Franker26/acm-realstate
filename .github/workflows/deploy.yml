@@ -49,6 +49,7 @@ jobs:
           script: |
             cd /home/fzanetti/dev-tools/acm-realstate
             git pull origin main
+            kubectl apply -f k8s/namespace.yaml
             kubectl apply -f k8s/
             kubectl rollout status deployment/backend -n acm --timeout=120s
             kubectl rollout status deployment/frontend -n acm --timeout=120s
