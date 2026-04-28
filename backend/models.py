@@ -159,7 +159,7 @@ class User(Base):
     is_approver = Column(Boolean, default=False)
     needs_approval = Column(Boolean, default=False)
 
-    acms = relationship("ACM", back_populates="owner")
+    acms = relationship("ACM", back_populates="owner", foreign_keys="ACM.owner_id")
 
 
 class ApprovalComment(Base):
