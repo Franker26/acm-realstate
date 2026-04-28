@@ -1,10 +1,16 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator, model_validator
 
 from models import (
-    CalidadPropiedad, Distribucion, EstadoPropiedad, Orientacion, StageACM, TipoPropiedad
+    ApprovalStatus,
+    CalidadPropiedad,
+    Distribucion,
+    EstadoPropiedad,
+    Orientacion,
+    StageACM,
+    TipoPropiedad,
 )
 
 
@@ -167,6 +173,7 @@ class ACMRead(BaseModel):
     id: int
     nombre: str
     fecha_creacion: datetime
+    updated_at: Optional[datetime] = None
     notas: Optional[str]
     direccion: str
     tipo: TipoPropiedad
@@ -182,9 +189,13 @@ class ACMRead(BaseModel):
     pileta: bool
     distribucion: Optional[Distribucion]
     stage: Optional[StageACM] = StageACM.borrador
+    approval_status: ApprovalStatus = ApprovalStatus.no_requerida
+    approved_at: Optional[datetime] = None
     owner_id: Optional[int] = None
     owner_username: Optional[str] = None
+    requires_approval: bool = False
     comparables: list[ComparableRead] = []
+    approval_comments: list["ApprovalCommentRead"] = []
 
     @computed_field
     @property
@@ -202,10 +213,13 @@ class ACMSummary(BaseModel):
     id: int
     nombre: str
     fecha_creacion: datetime
+    updated_at: Optional[datetime] = None
     direccion: str
     stage: Optional[StageACM] = StageACM.borrador
+    approval_status: ApprovalStatus = ApprovalStatus.no_requerida
     owner_id: Optional[int] = None
     owner_username: Optional[str] = None
+    requires_approval: bool = False
     cantidad_comparables: int = 0
 
 
@@ -235,6 +249,66 @@ class PdfRequest(BaseModel):
     chart_image_b64: Optional[str] = None
 
 
+class ApprovalCommentBase(BaseModel):
+    section: str
+    message: str
+
+
+class ApprovalCommentRead(ApprovalCommentBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    author_id: Optional[int] = None
+    author_username: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ApprovalReviewRequest(BaseModel):
+    status: ApprovalStatus
+    comments: list[ApprovalCommentBase] = []
+
+    @model_validator(mode="after")
+    def validate_status(self):
+        if self.status == ApprovalStatus.no_requerida:
+            raise ValueError("Estado de aprobación inválido para revisión")
+        return self
+
+
+class BrandingSettings(BaseModel):
+    app_name: str = "ACM Real Estate"
+    primary_color: str = "#1a3a5c"
+    logo_data_url: Optional[str] = None
+
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    is_admin: bool = False
+    is_approver: bool = False
+    needs_approval: bool = False
+
+    @model_validator(mode="after")
+    def validate_approver_is_admin(self):
+        if self.is_approver and not self.is_admin:
+            raise ValueError("Un approver también debe ser admin")
+        return self
+
+
+class UserUpdate(BaseModel):
+    is_admin: Optional[bool] = None
+    is_approver: Optional[bool] = None
+    needs_approval: Optional[bool] = None
+
+
+class UserRead(BaseModel):
+    id: int
+    username: str
+    is_admin: bool
+    is_approver: bool = False
+    needs_approval: bool = False
+
+
 class PonderadoresDefaults(BaseModel):
     antiguedad_por_decada: float
     estado_a_refaccionar: float
@@ -250,3 +324,6 @@ class PonderadoresDefaults(BaseModel):
     oportunidad_mercado: float
     cochera: float
     pileta: float
+
+
+ACMRead.model_rebuild()

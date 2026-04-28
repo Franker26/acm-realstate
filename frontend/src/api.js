@@ -42,6 +42,8 @@ export async function loginUser(username, password) {
   return res.json()
 }
 
+export const getCurrentUser = () => request('GET', '/api/auth/me')
+
 export const createACM = (data) => request('POST', '/api/acm', data)
 export const listACMs = () => request('GET', '/api/acm')
 export const getACM = (id) => request('GET', `/api/acm/${id}`)
@@ -63,9 +65,16 @@ export const extractZonaprop = (url) => request('POST', '/api/zonaprop/extract',
 
 export const listUsers = () => request('GET', '/api/users')
 export const createUser = (data) => request('POST', '/api/users', data)
+export const updateUser = (id, data) => request('PATCH', `/api/users/${id}`, data)
 export const deleteUser = (id) => request('DELETE', `/api/users/${id}`)
 export const changePassword = (id, newPassword) =>
   request('PUT', `/api/users/${id}/password`, { new_password: newPassword })
+
+export const listPendingApprovals = () => request('GET', '/api/approvals/pending')
+export const reviewACM = (id, data) => request('PUT', `/api/acm/${id}/approval`, data)
+
+export const getBrandingSettings = () => request('GET', '/api/settings/branding')
+export const updateBrandingSettings = (data) => request('PUT', '/api/settings/branding', data)
 
 export async function generatePDF(acmId, chartImageB64) {
   const headers = { 'Content-Type': 'application/json' }

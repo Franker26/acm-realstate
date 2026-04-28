@@ -1,23 +1,49 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../App.jsx'
-import { changePassword, createUser, deleteUser, listUsers } from '../api.js'
-import { getSavedColor, getSavedLogo, getSavedAppName, saveColor, saveLogo, removeLogo, saveAppName, applyTheme } from '../theme.js'
+import {
+  changePassword,
+  createUser,
+  deleteUser,
+  getBrandingSettings,
+  listUsers,
+  updateBrandingSettings,
+  updateUser,
+} from '../api.js'
+import {
+  applyTheme,
+  getCachedBrandingPayload,
+  syncBranding,
+} from '../theme.js'
 
-// ---- Users tab (admin only) ----
+function RoleBadges({ user }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {user.is_admin && <span className="settings-badge settings-badge--admin">Admin</span>}
+      {user.is_approver && <span className="settings-badge settings-badge--approver">Approver</span>}
+      {!user.is_admin && <span className="settings-badge">Usuario</span>}
+      {user.needs_approval && <span className="settings-badge settings-badge--warning">Requiere aprobación</span>}
+    </div>
+  )
+}
 
-function UsersTab({ currentUser }) {
+function UsersTab({ currentUser, onCurrentUserUpdated }) {
   const [users, setUsers] = useState([])
   const [error, setError] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [newUser, setNewUser] = useState({ username: '', password: '', is_admin: false })
+  const [newUser, setNewUser] = useState({
+    username: '',
+    password: '',
+    is_admin: false,
+    is_approver: false,
+    needs_approval: false,
+  })
   const [adding, setAdding] = useState(false)
-  const [pwdEdit, setPwdEdit] = useState({}) // { [userId]: newPwd }
-  const [saving, setSaving] = useState({})   // { [userId]: bool }
+  const [pwdEdit, setPwdEdit] = useState({})
+  const [savingPwd, setSavingPwd] = useState({})
+  const [savingRoleId, setSavingRoleId] = useState(null)
 
   useEffect(() => {
-    listUsers()
-      .then(setUsers)
-      .catch((e) => setError(e.message))
+    listUsers().then(setUsers).catch((e) => setError(e.message))
   }, [])
 
   async function handleAdd(e) {
@@ -28,7 +54,13 @@ function UsersTab({ currentUser }) {
     try {
       const created = await createUser(newUser)
       setUsers((prev) => [...prev, created])
-      setNewUser({ username: '', password: '', is_admin: false })
+      setNewUser({
+        username: '',
+        password: '',
+        is_admin: false,
+        is_approver: false,
+        needs_approval: false,
+      })
       setShowAdd(false)
     } catch (e) {
       setError(e.message)
@@ -51,7 +83,7 @@ function UsersTab({ currentUser }) {
   async function handleChangePwd(id) {
     const pwd = pwdEdit[id]
     if (!pwd || pwd.length < 4) return
-    setSaving((prev) => ({ ...prev, [id]: true }))
+    setSavingPwd((prev) => ({ ...prev, [id]: true }))
     setError(null)
     try {
       await changePassword(id, pwd)
@@ -59,7 +91,25 @@ function UsersTab({ currentUser }) {
     } catch (e) {
       setError(e.message)
     } finally {
-      setSaving((prev) => ({ ...prev, [id]: false }))
+      setSavingPwd((prev) => ({ ...prev, [id]: false }))
+    }
+  }
+
+  async function handleToggle(user, field, checked) {
+    const next = { [field]: checked }
+    if (field === 'is_approver' && checked) next.is_admin = true
+    if (field === 'is_admin' && !checked) next.is_approver = false
+
+    setSavingRoleId(user.id)
+    setError(null)
+    try {
+      const updated = await updateUser(user.id, next)
+      setUsers((prev) => prev.map((item) => (item.id === user.id ? updated : item)))
+      if (updated.id === currentUser.id) await onCurrentUserUpdated()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSavingRoleId(null)
     }
   }
 
@@ -70,51 +120,77 @@ function UsersTab({ currentUser }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
         <thead>
           <tr style={{ borderBottom: '2px solid #e0e0e0', textAlign: 'left' }}>
-            <th style={{ padding: '8px 12px', color: '#555', fontWeight: 600 }}>Usuario</th>
-            <th style={{ padding: '8px 12px', color: '#555', fontWeight: 600 }}>Rol</th>
-            <th style={{ padding: '8px 12px', color: '#555', fontWeight: 600 }}>Nueva contraseña</th>
+            <th style={{ padding: '8px 12px' }}>Usuario</th>
+            <th style={{ padding: '8px 12px' }}>Roles</th>
+            <th style={{ padding: '8px 12px' }}>Permisos</th>
+            <th style={{ padding: '8px 12px' }}>Nueva contraseña</th>
             <th style={{ padding: '8px 12px' }} />
           </tr>
         </thead>
         <tbody>
-          {users.map((u) => (
-            <tr key={u.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-              <td style={{ padding: '10px 12px', fontWeight: u.username === currentUser.username ? 700 : 400 }}>
-                {u.username}
-                {u.username === currentUser.username && (
+          {users.map((user) => (
+            <tr key={user.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+              <td style={{ padding: '10px 12px', fontWeight: user.username === currentUser.username ? 700 : 400 }}>
+                {user.username}
+                {user.username === currentUser.username && (
                   <span style={{ fontSize: 11, color: '#888', marginLeft: 6 }}>(vos)</span>
                 )}
               </td>
               <td style={{ padding: '10px 12px' }}>
-                <span style={{
-                  fontSize: 11, padding: '2px 8px', borderRadius: 10,
-                  background: u.is_admin ? '#e8f4fd' : '#f5f5f5',
-                  color: u.is_admin ? '#1565c0' : '#666',
-                }}>
-                  {u.is_admin ? 'Admin' : 'Usuario'}
-                </span>
+                <RoleBadges user={user} />
+              </td>
+              <td style={{ padding: '10px 12px', minWidth: 230 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={user.is_admin}
+                      disabled={savingRoleId === user.id}
+                      onChange={(e) => handleToggle(user, 'is_admin', e.target.checked)}
+                    />
+                    <span>Admin</span>
+                  </label>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={user.is_approver}
+                      disabled={savingRoleId === user.id}
+                      onChange={(e) => handleToggle(user, 'is_approver', e.target.checked)}
+                    />
+                    <span>Approver</span>
+                  </label>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={user.needs_approval}
+                      disabled={savingRoleId === user.id}
+                      onChange={(e) => handleToggle(user, 'needs_approval', e.target.checked)}
+                    />
+                    <span>Necesita aprobación</span>
+                  </label>
+                </div>
               </td>
               <td style={{ padding: '8px 12px' }}>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input
                     type="password"
                     placeholder="Nueva contraseña"
-                    value={pwdEdit[u.id] || ''}
-                    onChange={(e) => setPwdEdit((p) => ({ ...p, [u.id]: e.target.value }))}
+                    value={pwdEdit[user.id] || ''}
+                    onChange={(e) => setPwdEdit((p) => ({ ...p, [user.id]: e.target.value }))}
                     style={{ fontSize: 13, padding: '4px 8px', width: 180 }}
                   />
                   <button
                     className="btn btn-secondary btn-sm"
-                    onClick={() => handleChangePwd(u.id)}
-                    disabled={!pwdEdit[u.id] || pwdEdit[u.id].length < 4 || saving[u.id]}
+                    onClick={() => handleChangePwd(user.id)}
+                    disabled={!pwdEdit[user.id] || pwdEdit[user.id].length < 4 || savingPwd[user.id]}
                   >
-                    {saving[u.id] ? <span className="spinner" /> : 'Guardar'}
+                    {savingPwd[user.id] ? <span className="spinner" /> : 'Guardar'}
                   </button>
                 </div>
               </td>
               <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                {u.username !== currentUser.username && (
-                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(u.id)}>
+                {user.username !== currentUser.username && (
+                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(user.id)}>
                     Eliminar
                   </button>
                 )}
@@ -125,36 +201,66 @@ function UsersTab({ currentUser }) {
       </table>
 
       {showAdd ? (
-        <form onSubmit={handleAdd} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            placeholder="Usuario"
-            value={newUser.username}
-            autoFocus
-            onChange={(e) => setNewUser((p) => ({ ...p, username: e.target.value }))}
-            style={{ fontSize: 13, padding: '4px 8px', width: 150 }}
-          />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            value={newUser.password}
-            onChange={(e) => setNewUser((p) => ({ ...p, password: e.target.value }))}
-            style={{ fontSize: 13, padding: '4px 8px', width: 150 }}
-          />
-          <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <form onSubmit={handleAdd} style={{ display: 'grid', gap: 10, maxWidth: 560 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
-              type="checkbox"
-              checked={newUser.is_admin}
-              onChange={(e) => setNewUser((p) => ({ ...p, is_admin: e.target.checked }))}
+              type="text"
+              placeholder="Usuario"
+              value={newUser.username}
+              autoFocus
+              onChange={(e) => setNewUser((p) => ({ ...p, username: e.target.value }))}
+              style={{ fontSize: 13, padding: '6px 8px', width: 170 }}
             />
-            Admin
-          </label>
-          <button type="submit" className="btn btn-primary btn-sm" disabled={adding}>
-            {adding ? <span className="spinner" /> : 'Crear'}
-          </button>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowAdd(false)}>
-            Cancelar
-          </button>
+            <input
+              type="password"
+              placeholder="Contraseña"
+              value={newUser.password}
+              onChange={(e) => setNewUser((p) => ({ ...p, password: e.target.value }))}
+              style={{ fontSize: 13, padding: '6px 8px', width: 170 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={newUser.is_admin}
+                onChange={(e) => setNewUser((p) => ({
+                  ...p,
+                  is_admin: e.target.checked,
+                  is_approver: e.target.checked ? p.is_approver : false,
+                }))}
+              />
+              <span>Admin</span>
+            </label>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={newUser.is_approver}
+                onChange={(e) => setNewUser((p) => ({
+                  ...p,
+                  is_approver: e.target.checked,
+                  is_admin: e.target.checked ? true : p.is_admin,
+                }))}
+              />
+              <span>Approver</span>
+            </label>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={newUser.needs_approval}
+                onChange={(e) => setNewUser((p) => ({ ...p, needs_approval: e.target.checked }))}
+              />
+              <span>Necesita aprobación</span>
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={adding}>
+              {adding ? <span className="spinner" /> : 'Crear'}
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowAdd(false)}>
+              Cancelar
+            </button>
+          </div>
         </form>
       ) : (
         <button className="btn btn-secondary btn-sm" onClick={() => setShowAdd(true)}>
@@ -165,22 +271,23 @@ function UsersTab({ currentUser }) {
   )
 }
 
-// ---- Theme tab ----
-
 function ThemeTab() {
-  const [color, setColor] = useState(() => getSavedColor())
-  const [logo, setLogo] = useState(() => getSavedLogo())
-  const [appName, setAppName] = useState(() => getSavedAppName())
+  const [branding, setBranding] = useState(() => getCachedBrandingPayload())
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
+  const [error, setError] = useState(null)
   const fileRef = useRef(null)
 
-  function handleColorChange(e) {
-    setColor(e.target.value)
-    applyTheme(e.target.value)
-  }
+  useEffect(() => {
+    getBrandingSettings()
+      .then((data) => setBranding(data))
+      .catch((e) => setError(e.message))
+  }, [])
 
-  function handleColorSave() {
-    saveColor(color)
-    window.dispatchEvent(new Event('acm_theme_changed'))
+  function handleColorChange(e) {
+    const color = e.target.value
+    setBranding((prev) => ({ ...prev, primary_color: color }))
+    applyTheme(color)
   }
 
   function handleLogoUpload(e) {
@@ -188,37 +295,41 @@ function ThemeTab() {
     if (!file) return
     const reader = new FileReader()
     reader.onload = (ev) => {
-      saveLogo(ev.target.result)
-      setLogo(ev.target.result)
-      window.dispatchEvent(new Event('acm_theme_changed'))
+      setBranding((prev) => ({ ...prev, logo_data_url: ev.target.result }))
     }
     reader.readAsDataURL(file)
   }
 
-  function handleRemoveLogo() {
-    removeLogo()
-    setLogo(null)
-    window.dispatchEvent(new Event('acm_theme_changed'))
-  }
-
-  function handleAppNameSave() {
-    saveAppName(appName)
-    window.dispatchEvent(new Event('acm_theme_changed'))
+  async function handleSave() {
+    setSaving(true)
+    setMessage(null)
+    setError(null)
+    try {
+      const saved = await updateBrandingSettings(branding)
+      setBranding(saved)
+      syncBranding(saved)
+      window.dispatchEvent(new Event('acm_theme_changed'))
+      setMessage('Branding actualizado para toda la aplicación.')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 520 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 560 }}>
+      {error && <div className="alert alert-error">{error}</div>}
+      {message && <div className="alert alert-success">{message}</div>}
+
       <div className="card">
         <h3 style={{ marginBottom: 16, color: 'var(--primary)' }}>Nombre de la aplicación</h3>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="text"
-            value={appName}
-            onChange={(e) => setAppName(e.target.value)}
-            style={{ flex: 1, padding: '7px 10px', border: '1px solid #ccc', borderRadius: 5, fontSize: 14 }}
-          />
-          <button className="btn btn-primary btn-sm" onClick={handleAppNameSave}>Guardar</button>
-        </div>
+        <input
+          type="text"
+          value={branding.app_name || ''}
+          onChange={(e) => setBranding((prev) => ({ ...prev, app_name: e.target.value }))}
+          style={{ width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: 5, fontSize: 14 }}
+        />
       </div>
 
       <div className="card">
@@ -226,31 +337,32 @@ function ThemeTab() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <input
             type="color"
-            value={color}
+            value={branding.primary_color || '#1a3a5c'}
             onChange={handleColorChange}
             style={{ width: 48, height: 40, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 2 }}
           />
-          <span style={{ fontSize: 13, color: '#555' }}>{color}</span>
-          <button className="btn btn-primary btn-sm" onClick={handleColorSave}>Aplicar</button>
+          <span style={{ fontSize: 13, color: '#555' }}>{branding.primary_color}</span>
         </div>
-        <p style={{ fontSize: 12, color: '#888', marginTop: 10 }}>
-          Cambia el color de cabecera, botones y elementos destacados en toda la aplicación.
-        </p>
       </div>
 
       <div className="card">
         <h3 style={{ marginBottom: 16, color: 'var(--primary)' }}>Logotipo</h3>
-        {logo && (
+        {branding.logo_data_url && (
           <div style={{ marginBottom: 14 }}>
-            <img src={logo} alt="Logo actual" style={{ maxHeight: 60, maxWidth: 200, borderRadius: 6, border: '1px solid #eee', padding: 4 }} />
+            <img src={branding.logo_data_url} alt="Logo actual" style={{ maxHeight: 60, maxWidth: 220, borderRadius: 6, border: '1px solid #eee', padding: 4 }} />
           </div>
         )}
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
-            {logo ? 'Cambiar logo' : 'Subir logo'}
+            {branding.logo_data_url ? 'Cambiar logo' : 'Subir logo'}
           </button>
-          {logo && (
-            <button className="btn btn-danger btn-sm" onClick={handleRemoveLogo}>Quitar logo</button>
+          {branding.logo_data_url && (
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => setBranding((prev) => ({ ...prev, logo_data_url: null }))}
+            >
+              Quitar logo
+            </button>
           )}
         </div>
         <input
@@ -260,15 +372,15 @@ function ThemeTab() {
           style={{ display: 'none' }}
           onChange={handleLogoUpload}
         />
-        <p style={{ fontSize: 12, color: '#888', marginTop: 10 }}>
-          PNG o SVG recomendado. Se muestra junto al nombre en la cabecera.
-        </p>
       </div>
+
+      <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+        {saving && <span className="spinner" />}
+        Guardar branding
+      </button>
     </div>
   )
 }
-
-// ---- Map tab ----
 
 const OSM_KEY = 'acm_osm_enabled'
 
@@ -286,7 +398,6 @@ function MapTab() {
       <h3 style={{ marginBottom: 16, color: '#1a3a5c' }}>Autocompletar direcciones</h3>
       <p style={{ fontSize: 14, color: '#555', marginBottom: 20 }}>
         Cuando está activo, los campos de dirección sugieren resultados usando OpenStreetMap Nominatim.
-        Desactivalo si preferís ingresar las direcciones manualmente o si experimentás lentitud.
       </p>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button
@@ -311,10 +422,8 @@ function MapTab() {
   )
 }
 
-// ---- Main ----
-
 export default function Settings() {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const [tab, setTab] = useState(user?.is_admin ? 'usuarios' : 'mapa')
 
   return (
@@ -323,7 +432,7 @@ export default function Settings() {
         <h1>Configuración</h1>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {user?.is_admin && (
           <button
             className={`btn btn-sm ${tab === 'usuarios' ? 'btn-primary' : 'btn-secondary'}`}
@@ -338,17 +447,21 @@ export default function Settings() {
         >
           OpenStreetMap
         </button>
-        <button
-          className={`btn btn-sm ${tab === 'tema' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setTab('tema')}
-        >
-          Personalización
-        </button>
+        {user?.is_admin && (
+          <button
+            className={`btn btn-sm ${tab === 'tema' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setTab('tema')}
+          >
+            Personalización
+          </button>
+        )}
       </div>
 
-      {tab === 'usuarios' && user?.is_admin && <UsersTab currentUser={user} />}
+      {tab === 'usuarios' && user?.is_admin && (
+        <UsersTab currentUser={user} onCurrentUserUpdated={refreshUser} />
+      )}
       {tab === 'mapa' && <MapTab />}
-      {tab === 'tema' && <ThemeTab />}
+      {tab === 'tema' && user?.is_admin && <ThemeTab />}
     </div>
   )
 }

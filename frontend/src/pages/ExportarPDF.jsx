@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { generatePDF } from '../api.js'
+import { generatePDF, getACM } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 
 function fmt(n) {
@@ -13,11 +13,18 @@ export default function ExportarPDF() {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
+  const [acm, setAcm] = useState(null)
   const navigate = useNavigate()
 
   const resultado = state.resultado
+  const blockedByApproval = acm?.requires_approval && acm?.approval_status !== 'Aprobado'
+
+  useEffect(() => {
+    getACM(id).then(setAcm).catch((e) => setError(e.message))
+  }, [id])
 
   async function handleDownload() {
+    if (blockedByApproval) return
     setGenerating(true)
     setError(null)
     setSuccess(false)
@@ -49,6 +56,20 @@ export default function ExportarPDF() {
       {resultado && (
         <div className="card">
           <h2>Resumen de resultados</h2>
+          {blockedByApproval && (
+            <div className="alert alert-error">
+              Esta tasación requiere aprobación antes de exportar.
+              {acm?.approval_comments?.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  {acm.approval_comments.map((comment) => (
+                    <div key={comment.id}>
+                      <strong>{comment.section}:</strong> {comment.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
             <div>
               <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase' }}>Promedio ajustado</div>
@@ -74,9 +95,9 @@ export default function ExportarPDF() {
           {error && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">PDF descargado correctamente.</div>}
 
-          <button className="btn btn-primary" onClick={handleDownload} disabled={generating}>
+          <button className="btn btn-primary" onClick={handleDownload} disabled={generating || blockedByApproval}>
             {generating && <span className="spinner" />}
-            {generating ? 'Generando PDF...' : 'Descargar PDF'}
+            {generating ? 'Generando PDF...' : blockedByApproval ? 'Pendiente de aprobación' : 'Descargar PDF'}
           </button>
         </div>
       )}

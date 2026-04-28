@@ -67,3 +67,18 @@ export function getSavedAppName() {
 export function saveAppName(name) {
   localStorage.setItem(THEME_APP_NAME_KEY, name || 'ACM Real Estate')
 }
+
+export function syncBranding({ app_name, primary_color, logo_data_url }) {
+  saveAppName(app_name || 'ACM Real Estate')
+  saveColor(primary_color || DEFAULT_COLOR)
+  if (logo_data_url) saveLogo(logo_data_url)
+  else removeLogo()
+}
+
+export function getCachedBrandingPayload() {
+  return {
+    app_name: getSavedAppName(),
+    primary_color: getSavedColor(),
+    logo_data_url: getSavedLogo(),
+  }
+}

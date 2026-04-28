@@ -20,7 +20,18 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 import calculator as calc
-from models import ACM, Base, Comparable, SessionLocal, StageACM, User, engine
+from models import (
+    ACM,
+    AppSetting,
+    ApprovalComment,
+    ApprovalStatus,
+    Base,
+    Comparable,
+    SessionLocal,
+    StageACM,
+    User,
+    engine,
+)
 from pdf_generator import generate_pdf
 
 # --- Auth config ---
@@ -32,7 +43,11 @@ _ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 _ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "acm1234")
 
 # Rutas que no requieren token
-_PUBLIC_PATHS = {"/api/auth/login", "/api/ponderadores/defaults"}
+_PUBLIC_PATHS = {
+    "/api/auth/login",
+    "/api/ponderadores/defaults",
+    "/api/settings/branding",
+}
 
 
 def _hash_password(pw: str) -> str:
@@ -73,6 +88,9 @@ from schemas import (
     ACMRead,
     ACMSummary,
     ACMUpdate,
+    ApprovalCommentRead,
+    ApprovalReviewRequest,
+    BrandingSettings,
     ComparableCreate,
     ComparableRead,
     ComparableResultado,
@@ -80,6 +98,9 @@ from schemas import (
     PdfRequest,
     PonderadoresDefaults,
     ResultadoResponse,
+    UserCreate,
+    UserRead,
+    UserUpdate,
 )
 
 _MIGRATIONS = [
@@ -92,6 +113,12 @@ _MIGRATIONS = [
     ("comparable", "factor_amenities REAL"),
     ("acm",        "owner_id INTEGER REFERENCES users(id)"),
     ("acm",        "stage VARCHAR DEFAULT 'borrador'"),
+    ("users",      "is_approver BOOLEAN DEFAULT 0"),
+    ("users",      "needs_approval BOOLEAN DEFAULT 0"),
+    ("acm",        "updated_at DATETIME"),
+    ("acm",        "approval_status VARCHAR DEFAULT 'No requerida'"),
+    ("acm",        "approved_by_id INTEGER REFERENCES users(id)"),
+    ("acm",        "approved_at DATETIME"),
 ]
 
 
@@ -112,8 +139,20 @@ async def lifespan(app: FastAPI):
                 username=_ADMIN_USERNAME,
                 hashed_password=_hash_password(_ADMIN_PASSWORD),
                 is_admin=True,
+                is_approver=True,
             ))
             db.commit()
+        else:
+            admin = db.query(User).filter(User.username == _ADMIN_USERNAME).first()
+            if admin and admin.is_admin and not admin.is_approver:
+                admin.is_approver = True
+                db.commit()
+        for acm in db.query(ACM).all():
+            if acm.updated_at is None:
+                acm.updated_at = acm.fecha_creacion
+            if acm.approval_status is None:
+                _mark_acm_pending_if_required(acm)
+        db.commit()
     yield
 
 
@@ -155,20 +194,21 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "username": user.username,
         "is_admin": user.is_admin,
+        "is_approver": user.is_approver,
+        "needs_approval": user.needs_approval,
     }
 
 
 @app.get("/api/auth/me")
 def me(request: Request, db: Session = Depends(get_db)):
-    token = request.headers.get("Authorization", "").split(" ", 1)[-1]
-    try:
-        username = _decode_token(token)
-    except JWTError:
-        raise HTTPException(401, "Token inválido")
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(401, "Usuario no encontrado")
-    return {"username": user.username, "is_admin": user.is_admin}
+    user = _current_user(request, db)
+    return {
+        "id": user.id,
+        "username": user.username,
+        "is_admin": user.is_admin,
+        "is_approver": user.is_approver,
+        "needs_approval": user.needs_approval,
+    }
 
 
 # --- User management ---
@@ -192,25 +232,36 @@ def _require_admin(request: Request, db: Session) -> User:
     return user
 
 
-class CreateUserRequest(PydanticBase):
-    username: str
-    password: str
-    is_admin: bool = False
+def _require_approver(request: Request, db: Session) -> User:
+    user = _current_user(request, db)
+    if not user.is_admin or not user.is_approver:
+        raise HTTPException(403, "Se requieren permisos de approver")
+    return user
+
+
+def _serialize_user(user: User) -> UserRead:
+    return UserRead(
+        id=user.id,
+        username=user.username,
+        is_admin=user.is_admin,
+        is_approver=user.is_approver,
+        needs_approval=user.needs_approval,
+    )
 
 
 class ChangePasswordRequest(PydanticBase):
     new_password: str
 
 
-@app.get("/api/users")
+@app.get("/api/users", response_model=list[UserRead])
 def list_users(request: Request, db: Session = Depends(get_db)):
     _require_admin(request, db)
     users = db.query(User).order_by(User.id).all()
-    return [{"id": u.id, "username": u.username, "is_admin": u.is_admin} for u in users]
+    return [_serialize_user(u) for u in users]
 
 
-@app.post("/api/users", status_code=201)
-def create_user(body: CreateUserRequest, request: Request, db: Session = Depends(get_db)):
+@app.post("/api/users", response_model=UserRead, status_code=201)
+def create_user(body: UserCreate, request: Request, db: Session = Depends(get_db)):
     _require_admin(request, db)
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(409, f"El usuario '{body.username}' ya existe")
@@ -218,11 +269,40 @@ def create_user(body: CreateUserRequest, request: Request, db: Session = Depends
         username=body.username,
         hashed_password=_hash_password(body.password),
         is_admin=body.is_admin,
+        is_approver=body.is_approver,
+        needs_approval=body.needs_approval,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {"id": user.id, "username": user.username, "is_admin": user.is_admin}
+    return _serialize_user(user)
+
+
+@app.patch("/api/users/{user_id}", response_model=UserRead)
+def update_user(user_id: int, body: UserUpdate, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+
+    data = body.model_dump(exclude_none=True)
+    next_is_admin = data.get("is_admin", user.is_admin)
+    next_is_approver = data.get("is_approver", user.is_approver)
+    if next_is_approver and not next_is_admin:
+        raise HTTPException(400, "Un approver también debe ser admin")
+    if current.id == user_id and "is_admin" in data and not next_is_admin:
+        raise HTTPException(400, "No podés quitarte el rol de admin")
+    if current.id == user_id and "is_approver" in data and not next_is_approver:
+        raise HTTPException(400, "No podés quitarte el rol de approver")
+
+    for field, value in data.items():
+        setattr(user, field, value)
+    if "needs_approval" in data:
+        for acm in user.acms:
+            _mark_acm_pending_if_required(acm)
+    db.commit()
+    db.refresh(user)
+    return _serialize_user(user)
 
 
 @app.delete("/api/users/{user_id}", status_code=204)
@@ -249,6 +329,22 @@ def change_user_password(user_id: int, body: ChangePasswordRequest, request: Req
     db.commit()
 
 
+@app.get("/api/settings/branding", response_model=BrandingSettings)
+def get_branding_settings(db: Session = Depends(get_db)):
+    return _get_branding_settings(db)
+
+
+@app.put("/api/settings/branding", response_model=BrandingSettings)
+def update_branding_settings(
+    body: BrandingSettings,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    _require_admin(request, db)
+    _save_branding_settings(body, db)
+    return _get_branding_settings(db)
+
+
 def _get_acm_or_404(acm_id: int, db: Session) -> ACM:
     acm = db.query(ACM).filter(ACM.id == acm_id).first()
     if not acm:
@@ -263,6 +359,60 @@ def _get_comparable_or_404(acm_id: int, cid: int, db: Session) -> Comparable:
     if not comp:
         raise HTTPException(status_code=404, detail=f"Comparable {cid} no encontrado")
     return comp
+
+
+def _requires_approval(acm: ACM) -> bool:
+    return bool(acm.owner and acm.owner.needs_approval)
+
+
+def _serialize_approval_comment(comment: ApprovalComment) -> ApprovalCommentRead:
+    data = ApprovalCommentRead.model_validate(comment)
+    data.author_username = comment.author.username if comment.author else None
+    return data
+
+
+def _mark_acm_pending_if_required(acm: ACM):
+    if _requires_approval(acm):
+        acm.approval_status = ApprovalStatus.pendiente
+        acm.approved_by_id = None
+        acm.approved_at = None
+    else:
+        acm.approval_status = ApprovalStatus.no_requerida
+        acm.approved_by_id = None
+        acm.approved_at = None
+
+
+def _require_export_approval(acm: ACM):
+    if _requires_approval(acm) and acm.approval_status != ApprovalStatus.aprobado:
+        raise HTTPException(
+            403,
+            "Esta tasación requiere aprobación antes de exportar el informe",
+        )
+
+
+_BRANDING_DEFAULTS = {
+    "app_name": "ACM Real Estate",
+    "primary_color": "#1a3a5c",
+    "logo_data_url": None,
+}
+
+
+def _get_branding_settings(db: Session) -> BrandingSettings:
+    payload = {}
+    for key, default in _BRANDING_DEFAULTS.items():
+        setting = db.query(AppSetting).filter(AppSetting.key == key).first()
+        payload[key] = setting.value if setting and setting.value is not None else default
+    return BrandingSettings(**payload)
+
+
+def _save_branding_settings(body: BrandingSettings, db: Session):
+    for key, value in body.model_dump().items():
+        setting = db.query(AppSetting).filter(AppSetting.key == key).first()
+        if not setting:
+            setting = AppSetting(key=key)
+            db.add(setting)
+        setting.value = value
+    db.commit()
 
 
 def _make_snapshot(obj) -> calc.PropertySnapshot:
@@ -294,6 +444,11 @@ def _enrich_comparable(acm: ACM, comp: Comparable) -> ComparableRead:
         "factor_distribucion": comp.factor_distribucion,
         "factor_oferta": comp.factor_oferta,
         "factor_oportunidad": comp.factor_oportunidad,
+        "factor_cochera": comp.factor_cochera,
+        "factor_pileta": comp.factor_pileta,
+        "factor_luminosidad": comp.factor_luminosidad,
+        "factor_vistas": comp.factor_vistas,
+        "factor_amenities": comp.factor_amenities,
     }
     result = calc.compute_adjusted_price(
         subject=subject,
@@ -330,6 +485,7 @@ def _check_acm_access(acm: ACM, current: User):
 def create_acm(body: ACMCreate, request: Request, db: Session = Depends(get_db)):
     current = _current_user(request, db)
     acm = ACM(**body.model_dump(exclude=_COMPUTED_FIELDS), owner_id=current.id)
+    _mark_acm_pending_if_required(acm)
     db.add(acm)
     db.commit()
     db.refresh(acm)
@@ -347,6 +503,7 @@ def list_acms(request: Request, db: Session = Depends(get_db)):
         s = ACMSummary.model_validate(acm)
         s.cantidad_comparables = len(acm.comparables)
         s.owner_username = acm.owner.username if acm.owner else None
+        s.requires_approval = _requires_approval(acm)
         result.append(s)
     return result
 
@@ -366,6 +523,8 @@ def update_acm(acm_id: int, body: ACMUpdate, request: Request, db: Session = Dep
     _check_acm_access(acm, current)
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(acm, field, value)
+    if body.model_dump(exclude_none=True):
+        _mark_acm_pending_if_required(acm)
     db.commit()
     db.refresh(acm)
     return _build_acm_read(acm)
@@ -384,7 +543,9 @@ def _build_acm_read(acm: ACM) -> ACMRead:
     enriched = [_enrich_comparable(acm, c) for c in acm.comparables]
     data = ACMRead.model_validate(acm)
     data.owner_username = acm.owner.username if acm.owner else None
+    data.requires_approval = _requires_approval(acm)
     data.comparables = enriched
+    data.approval_comments = [_serialize_approval_comment(c) for c in acm.approval_comments]
     return data
 
 
@@ -395,6 +556,7 @@ def add_comparable(acm_id: int, body: ComparableCreate, request: Request, db: Se
     acm = _get_acm_checked(acm_id, request, db)
     comp = Comparable(acm_id=acm_id, **body.model_dump(exclude=_COMPUTED_FIELDS))
     db.add(comp)
+    _mark_acm_pending_if_required(acm)
     db.commit()
     db.refresh(comp)
     return _enrich_comparable(acm, comp)
@@ -406,6 +568,8 @@ def update_comparable(acm_id: int, cid: int, body: ComparableUpdate, request: Re
     comp = _get_comparable_or_404(acm_id, cid, db)
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(comp, field, value)
+    if body.model_dump(exclude_none=True):
+        _mark_acm_pending_if_required(acm)
     db.commit()
     db.refresh(comp)
     return _enrich_comparable(acm, comp)
@@ -413,10 +577,60 @@ def update_comparable(acm_id: int, cid: int, body: ComparableUpdate, request: Re
 
 @app.delete("/api/acm/{acm_id}/comparable/{cid}", status_code=204)
 def delete_comparable(acm_id: int, cid: int, request: Request, db: Session = Depends(get_db)):
-    _get_acm_checked(acm_id, request, db)
+    acm = _get_acm_checked(acm_id, request, db)
     comp = _get_comparable_or_404(acm_id, cid, db)
     db.delete(comp)
+    _mark_acm_pending_if_required(acm)
     db.commit()
+
+
+# --- Approval workflow ---
+
+@app.get("/api/approvals/pending", response_model=list[ACMSummary])
+def list_pending_approvals(request: Request, db: Session = Depends(get_db)):
+    _require_approver(request, db)
+    query = (
+        db.query(ACM)
+        .filter(ACM.approval_status == ApprovalStatus.pendiente)
+        .order_by(ACM.updated_at.desc(), ACM.fecha_creacion.desc())
+    )
+    result = []
+    for acm in query.all():
+        s = ACMSummary.model_validate(acm)
+        s.cantidad_comparables = len(acm.comparables)
+        s.owner_username = acm.owner.username if acm.owner else None
+        s.requires_approval = _requires_approval(acm)
+        result.append(s)
+    return result
+
+
+@app.put("/api/acm/{acm_id}/approval", response_model=ACMRead)
+def review_acm(
+    acm_id: int,
+    body: ApprovalReviewRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    reviewer = _require_approver(request, db)
+    acm = _get_acm_or_404(acm_id, db)
+    if not _requires_approval(acm):
+        raise HTTPException(400, "Esta tasación no requiere aprobación")
+
+    acm.approval_status = body.status
+    acm.approved_by_id = reviewer.id if body.status == ApprovalStatus.aprobado else None
+    acm.approved_at = datetime.utcnow() if body.status == ApprovalStatus.aprobado else None
+
+    db.query(ApprovalComment).filter(ApprovalComment.acm_id == acm_id).delete()
+    for item in body.comments:
+        db.add(ApprovalComment(
+            acm_id=acm_id,
+            section=item.section.strip(),
+            message=item.message.strip(),
+            author_id=reviewer.id,
+        ))
+    db.commit()
+    db.refresh(acm)
+    return _build_acm_read(acm)
 
 
 # --- Resultado y PDF ---
@@ -479,6 +693,7 @@ def generate_acm_pdf(acm_id: int, body: PdfRequest, request: Request, db: Sessio
     acm = _get_acm_checked(acm_id, request, db)
     if not acm.comparables:
         raise HTTPException(status_code=422, detail="El ACM no tiene comparables")
+    _require_export_approval(acm)
 
     acm_read = _build_acm_read(acm)
 

@@ -55,12 +55,20 @@ class StageACM(str, enum.Enum):
     finalizado = "Finalizado"
 
 
+class ApprovalStatus(str, enum.Enum):
+    no_requerida = "No requerida"
+    pendiente = "Pendiente"
+    aprobado = "Aprobado"
+    cambios_solicitados = "Cambios solicitados"
+
+
 class ACM(Base):
     __tablename__ = "acm"
 
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False)
     fecha_creacion = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     notas = Column(String, nullable=True)
 
     direccion = Column(String, nullable=False)
@@ -79,9 +87,20 @@ class ACM(Base):
 
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     stage = Column(Enum(StageACM), nullable=True, default=StageACM.borrador)
+    approval_status = Column(
+        Enum(ApprovalStatus), nullable=False, default=ApprovalStatus.no_requerida
+    )
+    approved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
 
     comparables = relationship("Comparable", back_populates="acm", cascade="all, delete-orphan")
-    owner = relationship("User", back_populates="acms")
+    owner = relationship("User", back_populates="acms", foreign_keys=[owner_id])
+    approver = relationship("User", foreign_keys=[approved_by_id])
+    approval_comments = relationship(
+        "ApprovalComment",
+        back_populates="acm",
+        cascade="all, delete-orphan",
+    )
 
 
 class Comparable(Base):
@@ -137,5 +156,29 @@ class User(Base):
     username = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     is_admin = Column(Boolean, default=False)
+    is_approver = Column(Boolean, default=False)
+    needs_approval = Column(Boolean, default=False)
 
     acms = relationship("ACM", back_populates="owner")
+
+
+class ApprovalComment(Base):
+    __tablename__ = "approval_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    acm_id = Column(Integer, ForeignKey("acm.id"), nullable=False, index=True)
+    section = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    acm = relationship("ACM", back_populates="approval_comments")
+    author = relationship("User")
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=True)

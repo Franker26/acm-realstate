@@ -1,14 +1,27 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../App.jsx'
+import { getBrandingSettings } from '../api.js'
+import { applyTheme, getSavedAppName, syncBranding } from '../theme.js'
 
 export default function Login() {
+  const [appName, setAppName] = useState(() => getSavedAppName())
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+
+  React.useEffect(() => {
+    getBrandingSettings()
+      .then((branding) => {
+        syncBranding(branding)
+        applyTheme(branding.primary_color)
+        setAppName(branding.app_name)
+      })
+      .catch(() => {})
+  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -27,7 +40,7 @@ export default function Login() {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '70vh' }}>
       <div className="card" style={{ width: '100%', maxWidth: 360 }}>
-        <h2 style={{ marginBottom: 24, textAlign: 'center', color: '#1a3a5c' }}>ACM Real Estate</h2>
+        <h2 style={{ marginBottom: 24, textAlign: 'center', color: 'var(--primary)' }}>{appName}</h2>
         <form onSubmit={handleSubmit}>
           <div className="form-group" style={{ marginBottom: 14 }}>
             <label>Usuario</label>
