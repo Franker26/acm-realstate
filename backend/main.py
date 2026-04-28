@@ -91,7 +91,7 @@ _MIGRATIONS = [
     ("comparable", "factor_vistas REAL"),
     ("comparable", "factor_amenities REAL"),
     ("acm",        "owner_id INTEGER REFERENCES users(id)"),
-    ("acm",        "stage VARCHAR DEFAULT 'BORRADOR'"),
+    ("acm",        "stage VARCHAR DEFAULT 'borrador'"),
 ]
 
 
