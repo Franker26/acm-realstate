@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt as _bcrypt_lib
 from pydantic import BaseModel as PydanticBase
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -31,18 +31,16 @@ _TOKEN_EXPIRE_DAYS = 7
 _ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 _ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "acm1234")
 
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # Rutas que no requieren token
 _PUBLIC_PATHS = {"/api/auth/login", "/api/ponderadores/defaults"}
 
 
 def _hash_password(pw: str) -> str:
-    return _pwd_ctx.hash(pw)
+    return _bcrypt_lib.hashpw(pw.encode(), _bcrypt_lib.gensalt()).decode()
 
 
 def _verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_ctx.verify(plain, hashed)
+    return _bcrypt_lib.checkpw(plain.encode(), hashed.encode())
 
 
 def _create_token(username: str) -> str:
