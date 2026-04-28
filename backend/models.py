@@ -49,6 +49,12 @@ class Distribucion(str, enum.Enum):
     regular = "Regular"
 
 
+class StageACM(str, enum.Enum):
+    borrador = "Borrador"
+    en_progreso = "En progreso"
+    finalizado = "Finalizado"
+
+
 class ACM(Base):
     __tablename__ = "acm"
 
@@ -71,7 +77,11 @@ class ACM(Base):
     pileta = Column(Boolean, default=False)
     distribucion = Column(Enum(Distribucion), nullable=True)
 
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    stage = Column(Enum(StageACM), nullable=True, default=StageACM.borrador)
+
     comparables = relationship("Comparable", back_populates="acm", cascade="all, delete-orphan")
+    owner = relationship("User", back_populates="acms")
 
 
 class Comparable(Base):
@@ -127,3 +137,5 @@ class User(Base):
     username = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     is_admin = Column(Boolean, default=False)
+
+    acms = relationship("ACM", back_populates="owner")

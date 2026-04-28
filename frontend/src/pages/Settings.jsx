@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../App.jsx'
 import { changePassword, createUser, deleteUser, listUsers } from '../api.js'
+import { getSavedColor, getSavedLogo, getSavedAppName, saveColor, saveLogo, removeLogo, saveAppName, applyTheme } from '../theme.js'
 
 // ---- Users tab (admin only) ----
 
@@ -164,6 +165,109 @@ function UsersTab({ currentUser }) {
   )
 }
 
+// ---- Theme tab ----
+
+function ThemeTab() {
+  const [color, setColor] = useState(() => getSavedColor())
+  const [logo, setLogo] = useState(() => getSavedLogo())
+  const [appName, setAppName] = useState(() => getSavedAppName())
+  const fileRef = useRef(null)
+
+  function handleColorChange(e) {
+    setColor(e.target.value)
+    applyTheme(e.target.value)
+  }
+
+  function handleColorSave() {
+    saveColor(color)
+    window.dispatchEvent(new Event('acm_theme_changed'))
+  }
+
+  function handleLogoUpload(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      saveLogo(ev.target.result)
+      setLogo(ev.target.result)
+      window.dispatchEvent(new Event('acm_theme_changed'))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function handleRemoveLogo() {
+    removeLogo()
+    setLogo(null)
+    window.dispatchEvent(new Event('acm_theme_changed'))
+  }
+
+  function handleAppNameSave() {
+    saveAppName(appName)
+    window.dispatchEvent(new Event('acm_theme_changed'))
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 520 }}>
+      <div className="card">
+        <h3 style={{ marginBottom: 16, color: 'var(--primary)' }}>Nombre de la aplicación</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="text"
+            value={appName}
+            onChange={(e) => setAppName(e.target.value)}
+            style={{ flex: 1, padding: '7px 10px', border: '1px solid #ccc', borderRadius: 5, fontSize: 14 }}
+          />
+          <button className="btn btn-primary btn-sm" onClick={handleAppNameSave}>Guardar</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 16, color: 'var(--primary)' }}>Color principal</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <input
+            type="color"
+            value={color}
+            onChange={handleColorChange}
+            style={{ width: 48, height: 40, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 2 }}
+          />
+          <span style={{ fontSize: 13, color: '#555' }}>{color}</span>
+          <button className="btn btn-primary btn-sm" onClick={handleColorSave}>Aplicar</button>
+        </div>
+        <p style={{ fontSize: 12, color: '#888', marginTop: 10 }}>
+          Cambia el color de cabecera, botones y elementos destacados en toda la aplicación.
+        </p>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 16, color: 'var(--primary)' }}>Logotipo</h3>
+        {logo && (
+          <div style={{ marginBottom: 14 }}>
+            <img src={logo} alt="Logo actual" style={{ maxHeight: 60, maxWidth: 200, borderRadius: 6, border: '1px solid #eee', padding: 4 }} />
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
+            {logo ? 'Cambiar logo' : 'Subir logo'}
+          </button>
+          {logo && (
+            <button className="btn btn-danger btn-sm" onClick={handleRemoveLogo}>Quitar logo</button>
+          )}
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleLogoUpload}
+        />
+        <p style={{ fontSize: 12, color: '#888', marginTop: 10 }}>
+          PNG o SVG recomendado. Se muestra junto al nombre en la cabecera.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ---- Map tab ----
 
 const OSM_KEY = 'acm_osm_enabled'
@@ -234,10 +338,17 @@ export default function Settings() {
         >
           OpenStreetMap
         </button>
+        <button
+          className={`btn btn-sm ${tab === 'tema' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setTab('tema')}
+        >
+          Personalización
+        </button>
       </div>
 
       {tab === 'usuarios' && user?.is_admin && <UsersTab currentUser={user} />}
       {tab === 'mapa' && <MapTab />}
+      {tab === 'tema' && <ThemeTab />}
     </div>
   )
 }

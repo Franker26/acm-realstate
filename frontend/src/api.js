@@ -68,9 +68,12 @@ export const changePassword = (id, newPassword) =>
   request('PUT', `/api/users/${id}/password`, { new_password: newPassword })
 
 export async function generatePDF(acmId, chartImageB64) {
+  const headers = { 'Content-Type': 'application/json' }
+  const token = getToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
   const res = await fetch(`/api/acm/${acmId}/pdf`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ chart_image_b64: chartImageB64 || null }),
   })
   if (!res.ok) {

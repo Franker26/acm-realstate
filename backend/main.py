@@ -20,7 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 import calculator as calc
-from models import ACM, Base, Comparable, SessionLocal, User, engine
+from models import ACM, Base, Comparable, SessionLocal, StageACM, User, engine
 from pdf_generator import generate_pdf
 
 # --- Auth config ---
@@ -90,6 +90,8 @@ _MIGRATIONS = [
     ("comparable", "factor_luminosidad REAL"),
     ("comparable", "factor_vistas REAL"),
     ("comparable", "factor_amenities REAL"),
+    ("acm",        "owner_id INTEGER REFERENCES users(id)"),
+    ("acm",        "stage VARCHAR DEFAULT 'Borrador'"),
 ]
 
 
@@ -312,9 +314,22 @@ def _enrich_comparable(acm: ACM, comp: Comparable) -> ComparableRead:
 _COMPUTED_FIELDS = {"superficie_homogeneizada"}
 
 
+def _get_acm_checked(acm_id: int, request: Request, db: Session) -> ACM:
+    current = _current_user(request, db)
+    acm = _get_acm_or_404(acm_id, db)
+    _check_acm_access(acm, current)
+    return acm
+
+
+def _check_acm_access(acm: ACM, current: User):
+    if not current.is_admin and acm.owner_id != current.id:
+        raise HTTPException(403, "Sin acceso a este ACM")
+
+
 @app.post("/api/acm", response_model=ACMRead, status_code=201)
-def create_acm(body: ACMCreate, db: Session = Depends(get_db)):
-    acm = ACM(**body.model_dump(exclude=_COMPUTED_FIELDS))
+def create_acm(body: ACMCreate, request: Request, db: Session = Depends(get_db)):
+    current = _current_user(request, db)
+    acm = ACM(**body.model_dump(exclude=_COMPUTED_FIELDS), owner_id=current.id)
     db.add(acm)
     db.commit()
     db.refresh(acm)
@@ -322,25 +337,33 @@ def create_acm(body: ACMCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/api/acm", response_model=list[ACMSummary])
-def list_acms(db: Session = Depends(get_db)):
-    acms = db.query(ACM).order_by(ACM.fecha_creacion.desc()).all()
+def list_acms(request: Request, db: Session = Depends(get_db)):
+    current = _current_user(request, db)
+    query = db.query(ACM).order_by(ACM.fecha_creacion.desc())
+    if not current.is_admin:
+        query = query.filter(ACM.owner_id == current.id)
     result = []
-    for acm in acms:
+    for acm in query.all():
         s = ACMSummary.model_validate(acm)
         s.cantidad_comparables = len(acm.comparables)
+        s.owner_username = acm.owner.username if acm.owner else None
         result.append(s)
     return result
 
 
 @app.get("/api/acm/{acm_id}", response_model=ACMRead)
-def get_acm(acm_id: int, db: Session = Depends(get_db)):
+def get_acm(acm_id: int, request: Request, db: Session = Depends(get_db)):
+    current = _current_user(request, db)
     acm = _get_acm_or_404(acm_id, db)
+    _check_acm_access(acm, current)
     return _build_acm_read(acm)
 
 
 @app.patch("/api/acm/{acm_id}", response_model=ACMRead)
-def update_acm(acm_id: int, body: ACMUpdate, db: Session = Depends(get_db)):
+def update_acm(acm_id: int, body: ACMUpdate, request: Request, db: Session = Depends(get_db)):
+    current = _current_user(request, db)
     acm = _get_acm_or_404(acm_id, db)
+    _check_acm_access(acm, current)
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(acm, field, value)
     db.commit()
@@ -349,8 +372,10 @@ def update_acm(acm_id: int, body: ACMUpdate, db: Session = Depends(get_db)):
 
 
 @app.delete("/api/acm/{acm_id}", status_code=204)
-def delete_acm(acm_id: int, db: Session = Depends(get_db)):
+def delete_acm(acm_id: int, request: Request, db: Session = Depends(get_db)):
+    current = _current_user(request, db)
     acm = _get_acm_or_404(acm_id, db)
+    _check_acm_access(acm, current)
     db.delete(acm)
     db.commit()
 
@@ -358,6 +383,7 @@ def delete_acm(acm_id: int, db: Session = Depends(get_db)):
 def _build_acm_read(acm: ACM) -> ACMRead:
     enriched = [_enrich_comparable(acm, c) for c in acm.comparables]
     data = ACMRead.model_validate(acm)
+    data.owner_username = acm.owner.username if acm.owner else None
     data.comparables = enriched
     return data
 
@@ -365,29 +391,29 @@ def _build_acm_read(acm: ACM) -> ACMRead:
 # --- Comparable endpoints ---
 
 @app.post("/api/acm/{acm_id}/comparable", response_model=ComparableRead, status_code=201)
-def add_comparable(acm_id: int, body: ComparableCreate, db: Session = Depends(get_db)):
-    _get_acm_or_404(acm_id, db)
+def add_comparable(acm_id: int, body: ComparableCreate, request: Request, db: Session = Depends(get_db)):
+    acm = _get_acm_checked(acm_id, request, db)
     comp = Comparable(acm_id=acm_id, **body.model_dump(exclude=_COMPUTED_FIELDS))
     db.add(comp)
     db.commit()
     db.refresh(comp)
-    acm = _get_acm_or_404(acm_id, db)
     return _enrich_comparable(acm, comp)
 
 
 @app.put("/api/acm/{acm_id}/comparable/{cid}", response_model=ComparableRead)
-def update_comparable(acm_id: int, cid: int, body: ComparableUpdate, db: Session = Depends(get_db)):
+def update_comparable(acm_id: int, cid: int, body: ComparableUpdate, request: Request, db: Session = Depends(get_db)):
+    acm = _get_acm_checked(acm_id, request, db)
     comp = _get_comparable_or_404(acm_id, cid, db)
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(comp, field, value)
     db.commit()
     db.refresh(comp)
-    acm = _get_acm_or_404(acm_id, db)
     return _enrich_comparable(acm, comp)
 
 
 @app.delete("/api/acm/{acm_id}/comparable/{cid}", status_code=204)
-def delete_comparable(acm_id: int, cid: int, db: Session = Depends(get_db)):
+def delete_comparable(acm_id: int, cid: int, request: Request, db: Session = Depends(get_db)):
+    _get_acm_checked(acm_id, request, db)
     comp = _get_comparable_or_404(acm_id, cid, db)
     db.delete(comp)
     db.commit()
@@ -396,8 +422,8 @@ def delete_comparable(acm_id: int, cid: int, db: Session = Depends(get_db)):
 # --- Resultado y PDF ---
 
 @app.get("/api/acm/{acm_id}/resultado", response_model=ResultadoResponse)
-def get_resultado(acm_id: int, db: Session = Depends(get_db)):
-    acm = _get_acm_or_404(acm_id, db)
+def get_resultado(acm_id: int, request: Request, db: Session = Depends(get_db)):
+    acm = _get_acm_checked(acm_id, request, db)
     if not acm.comparables:
         raise HTTPException(status_code=422, detail="El ACM no tiene comparables")
 
@@ -449,8 +475,8 @@ def get_resultado(acm_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/acm/{acm_id}/pdf")
-def generate_acm_pdf(acm_id: int, body: PdfRequest, db: Session = Depends(get_db)):
-    acm = _get_acm_or_404(acm_id, db)
+def generate_acm_pdf(acm_id: int, body: PdfRequest, request: Request, db: Session = Depends(get_db)):
+    acm = _get_acm_checked(acm_id, request, db)
     if not acm.comparables:
         raise HTTPException(status_code=422, detail="El ACM no tiene comparables")
 

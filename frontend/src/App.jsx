@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useReducer, useRef, useState } from 'react'
+import React, { createContext, useContext, useEffect, useReducer, useRef, useState } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { applyTheme, getSavedColor, getSavedLogo, getSavedAppName } from './theme.js'
 import NuevaTasacion from './pages/NuevaTasacion.jsx'
 import TipoACM from './pages/TipoACM.jsx'
 import AgregarComparables from './pages/AgregarComparables.jsx'
@@ -137,6 +138,27 @@ export function WizardNav({ currentStep }) {
 function AppHeader() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [logo, setLogo] = useState(() => getSavedLogo())
+  const [appName, setAppName] = useState(() => getSavedAppName())
+
+  useEffect(() => {
+    function onStorage(e) {
+      if (e.key === 'acm_theme_logo') setLogo(e.newValue)
+      if (e.key === 'acm_theme_name') setAppName(e.newValue || 'ACM Real Estate')
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  // Allow Settings to trigger header refresh without cross-tab
+  useEffect(() => {
+    function onThemeChange() {
+      setLogo(getSavedLogo())
+      setAppName(getSavedAppName())
+    }
+    window.addEventListener('acm_theme_changed', onThemeChange)
+    return () => window.removeEventListener('acm_theme_changed', onThemeChange)
+  }, [])
 
   function handleLogout() {
     logout()
@@ -145,7 +167,10 @@ function AppHeader() {
 
   return (
     <header className="app-header">
-      <Link to="/" className="app-title">ACM Real Estate</Link>
+      <Link to="/" className="app-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {logo && <img src={logo} alt="logo" style={{ height: 28, width: 'auto', borderRadius: 4 }} />}
+        <span>{appName}</span>
+      </Link>
       {user && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13 }}>
           <span style={{ color: '#b0c4de' }}>{user.username}</span>
@@ -186,6 +211,8 @@ function AppRoutes() {
 }
 
 export default function App() {
+  useEffect(() => { applyTheme(getSavedColor()) }, [])
+
   return (
     <BrowserRouter>
       <AuthProvider>

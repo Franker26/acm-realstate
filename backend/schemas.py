@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from models import (
-    CalidadPropiedad, Distribucion, EstadoPropiedad, Orientacion, TipoPropiedad
+    CalidadPropiedad, Distribucion, EstadoPropiedad, Orientacion, StageACM, TipoPropiedad
 )
 
 
@@ -43,6 +43,7 @@ class ACMCreate(PropertyBase):
     nombre: str
     notas: Optional[str] = None
     direccion: str
+    stage: StageACM = StageACM.borrador
 
 
 class ACMUpdate(BaseModel):
@@ -61,6 +62,7 @@ class ACMUpdate(BaseModel):
     cochera: Optional[bool] = None
     pileta: Optional[bool] = None
     distribucion: Optional[Distribucion] = None
+    stage: Optional[StageACM] = None
 
 
 class ComparableCreate(PropertyBase):
@@ -179,6 +181,9 @@ class ACMRead(BaseModel):
     cochera: bool
     pileta: bool
     distribucion: Optional[Distribucion]
+    stage: Optional[StageACM] = StageACM.borrador
+    owner_id: Optional[int] = None
+    owner_username: Optional[str] = None
     comparables: list[ComparableRead] = []
 
     @computed_field
@@ -198,6 +203,9 @@ class ACMSummary(BaseModel):
     nombre: str
     fecha_creacion: datetime
     direccion: str
+    stage: Optional[StageACM] = StageACM.borrador
+    owner_id: Optional[int] = None
+    owner_username: Optional[str] = None
     cantidad_comparables: int = 0
 
 
