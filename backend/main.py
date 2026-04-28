@@ -121,6 +121,28 @@ _MIGRATIONS = [
     ("acm",        "approved_at DATETIME"),
 ]
 
+_ENUM_NORMALIZATIONS = [
+    (
+        "acm",
+        "stage",
+        {
+            "Borrador": "borrador",
+            "En progreso": "en_progreso",
+            "Finalizado": "finalizado",
+        },
+    ),
+    (
+        "acm",
+        "approval_status",
+        {
+            "No requerida": "no_requerida",
+            "Pendiente": "pendiente",
+            "Aprobado": "aprobado",
+            "Cambios solicitados": "cambios_solicitados",
+        },
+    ),
+]
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -132,6 +154,13 @@ async def lifespan(app: FastAPI):
                 conn.commit()
             except Exception:
                 pass  # columna ya existe
+        for table, column, replacements in _ENUM_NORMALIZATIONS:
+            for old_value, new_value in replacements.items():
+                conn.execute(
+                    text(f"UPDATE {table} SET {column} = :new_value WHERE {column} = :old_value"),
+                    {"new_value": new_value, "old_value": old_value},
+                )
+            conn.commit()
     # Crear admin por defecto si no existe ningún usuario
     with SessionLocal() as db:
         if not db.query(User).first():
