@@ -2,18 +2,20 @@ function getToken() {
   return localStorage.getItem('acm_token')
 }
 
-async function request(method, path, body) {
+async function request(method, path, body, options = {}) {
+  const { auth = true, redirectOn401 = true } = options
   const headers = { 'Content-Type': 'application/json' }
   const token = getToken()
-  if (token) headers['Authorization'] = `Bearer ${token}`
+  if (auth && token) headers['Authorization'] = `Bearer ${token}`
   const opts = { method, headers }
   if (body !== undefined) opts.body = JSON.stringify(body)
   const res = await fetch(path, opts)
   if (res.status === 401) {
-    // Token expirado: limpiar sesión y recargar al login
     localStorage.removeItem('acm_token')
     localStorage.removeItem('acm_user')
-    window.location.href = '/login'
+    if (redirectOn401 && window.location.pathname !== '/login') {
+      window.location.assign('/login')
+    }
     throw new Error('Sesión expirada')
   }
   if (!res.ok) {
@@ -42,7 +44,8 @@ export async function loginUser(username, password) {
   return res.json()
 }
 
-export const getCurrentUser = () => request('GET', '/api/auth/me')
+export const getCurrentUser = () =>
+  request('GET', '/api/auth/me', undefined, { redirectOn401: false })
 
 export const createACM = (data) => request('POST', '/api/acm', data)
 export const listACMs = () => request('GET', '/api/acm')
@@ -59,7 +62,8 @@ export const deleteComparable = (acmId, cid) =>
 
 export const getResultado = (acmId) => request('GET', `/api/acm/${acmId}/resultado`)
 
-export const getDefaults = () => request('GET', '/api/ponderadores/defaults')
+export const getDefaults = () =>
+  request('GET', '/api/ponderadores/defaults', undefined, { auth: false, redirectOn401: false })
 
 export const extractZonaprop = (url) => request('POST', '/api/zonaprop/extract', { url })
 
@@ -73,7 +77,8 @@ export const changePassword = (id, newPassword) =>
 export const listPendingApprovals = () => request('GET', '/api/approvals/pending')
 export const reviewACM = (id, data) => request('PUT', `/api/acm/${id}/approval`, data)
 
-export const getBrandingSettings = () => request('GET', '/api/settings/branding')
+export const getBrandingSettings = () =>
+  request('GET', '/api/settings/branding', undefined, { auth: false, redirectOn401: false })
 export const updateBrandingSettings = (data) => request('PUT', '/api/settings/branding', data)
 
 export async function generatePDF(acmId, chartImageB64) {
