@@ -9,7 +9,24 @@ function useDebounce(value, delay) {
   return debounced
 }
 
+function isOsmEnabled() {
+  return localStorage.getItem('acm_osm_enabled') !== 'false'
+}
+
 export default function AddressAutocomplete({ value, onChange, placeholder, tabIndex, name }) {
+  if (!isOsmEnabled()) {
+    return (
+      <input
+        type="text"
+        name={name}
+        value={value || ''}
+        tabIndex={tabIndex}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(e) => onChange(e.target.value)}
+      />
+    )
+  }
   const [query, setQuery] = useState(value || '')
   const [suggestions, setSuggestions] = useState([])
   const [open, setOpen] = useState(false)

@@ -61,6 +61,12 @@ export const getDefaults = () => request('GET', '/api/ponderadores/defaults')
 
 export const extractZonaprop = (url) => request('POST', '/api/zonaprop/extract', { url })
 
+export const listUsers = () => request('GET', '/api/users')
+export const createUser = (data) => request('POST', '/api/users', data)
+export const deleteUser = (id) => request('DELETE', `/api/users/${id}`)
+export const changePassword = (id, newPassword) =>
+  request('PUT', `/api/users/${id}/password`, { new_password: newPassword })
+
 export async function generatePDF(acmId, chartImageB64) {
   const res = await fetch(`/api/acm/${acmId}/pdf`, {
     method: 'POST',

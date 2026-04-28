@@ -171,6 +171,84 @@ def me(request: Request, db: Session = Depends(get_db)):
     return {"username": user.username, "is_admin": user.is_admin}
 
 
+# --- User management ---
+
+def _current_user(request: Request, db: Session) -> User:
+    token = request.headers.get("Authorization", "").split(" ", 1)[-1]
+    try:
+        username = _decode_token(token)
+    except JWTError:
+        raise HTTPException(401, "Token inválido")
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(401, "Usuario no encontrado")
+    return user
+
+
+def _require_admin(request: Request, db: Session) -> User:
+    user = _current_user(request, db)
+    if not user.is_admin:
+        raise HTTPException(403, "Se requieren permisos de administrador")
+    return user
+
+
+class CreateUserRequest(PydanticBase):
+    username: str
+    password: str
+    is_admin: bool = False
+
+
+class ChangePasswordRequest(PydanticBase):
+    new_password: str
+
+
+@app.get("/api/users")
+def list_users(request: Request, db: Session = Depends(get_db)):
+    _require_admin(request, db)
+    users = db.query(User).order_by(User.id).all()
+    return [{"id": u.id, "username": u.username, "is_admin": u.is_admin} for u in users]
+
+
+@app.post("/api/users", status_code=201)
+def create_user(body: CreateUserRequest, request: Request, db: Session = Depends(get_db)):
+    _require_admin(request, db)
+    if db.query(User).filter(User.username == body.username).first():
+        raise HTTPException(409, f"El usuario '{body.username}' ya existe")
+    user = User(
+        username=body.username,
+        hashed_password=_hash_password(body.password),
+        is_admin=body.is_admin,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {"id": user.id, "username": user.username, "is_admin": user.is_admin}
+
+
+@app.delete("/api/users/{user_id}", status_code=204)
+def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    if current.id == user_id:
+        raise HTTPException(400, "No podés eliminar tu propio usuario")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+    db.delete(user)
+    db.commit()
+
+
+@app.put("/api/users/{user_id}/password", status_code=204)
+def change_user_password(user_id: int, body: ChangePasswordRequest, request: Request, db: Session = Depends(get_db)):
+    current = _current_user(request, db)
+    if not current.is_admin and current.id != user_id:
+        raise HTTPException(403, "Sin permisos")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+    user.hashed_password = _hash_password(body.new_password)
+    db.commit()
+
+
 def _get_acm_or_404(acm_id: int, db: Session) -> ACM:
     acm = db.query(ACM).filter(ACM.id == acm_id).first()
     if not acm:

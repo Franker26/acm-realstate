@@ -8,6 +8,7 @@ import ResultadosDashboard from './pages/ResultadosDashboard.jsx'
 import ExportarPDF from './pages/ExportarPDF.jsx'
 import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
+import Settings from './pages/Settings.jsx'
 import { loginUser } from './api.js'
 
 // --- Auth ---
@@ -148,6 +149,13 @@ function AppHeader() {
       {user && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13 }}>
           <span style={{ color: '#b0c4de' }}>{user.username}</span>
+          <Link
+            to="/settings"
+            style={{ color: '#b0c4de', textDecoration: 'none', fontSize: 12 }}
+            title="Configuración"
+          >
+            ⚙
+          </Link>
           <button
             onClick={handleLogout}
             style={{ background: 'none', border: '1px solid #b0c4de', color: '#b0c4de', borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 12 }}
@@ -172,6 +180,7 @@ function AppRoutes() {
       <Route path="/acm/:id/step/3" element={<PrivateRoute><AplicarPonderadores /></PrivateRoute>} />
       <Route path="/acm/:id/step/4" element={<PrivateRoute><ResultadosDashboard /></PrivateRoute>} />
       <Route path="/acm/:id/step/5" element={<PrivateRoute><ExportarPDF /></PrivateRoute>} />
+      <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
     </Routes>
   )
 }
