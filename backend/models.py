@@ -54,6 +54,7 @@ class StageACM(str, enum.Enum):
     borrador = "Borrador"
     en_progreso = "En progreso"
     finalizado = "Finalizado"
+    cancelado = "Cancelado"
 
 
 class ApprovalStatus(str, enum.Enum):

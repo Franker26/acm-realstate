@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { addComparable, deleteComparable, extractZonaprop, getACM, updateComparable } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 import PropertyForm from '../components/PropertyForm.jsx'
+import SmartLoader from '../components/SmartLoader.jsx'
 
 const EMPTY_COMP = {
   url: '',
@@ -63,7 +64,8 @@ export default function AgregarComparables() {
   const [apiError, setApiError] = useState(null)
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState(null)
-  const [showForm, setShowForm] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [pageReady, setPageReady] = useState(false)
   const { dispatch } = useWizard()
   const navigate = useNavigate()
 
@@ -71,7 +73,9 @@ export default function AgregarComparables() {
     getACM(id).then((acm) => {
       setComparables(acm.comparables)
       dispatch({ type: 'SET_ACM_ID', payload: acm.id })
-      if (acm.comparables.length > 0) setShowForm(false)
+      // Show form immediately only when there are no comparables yet
+      setShowForm(acm.comparables.length === 0)
+      setPageReady(true)
     })
   }, [id])
 
@@ -172,8 +176,13 @@ export default function AgregarComparables() {
     setShowForm(false)
   }
 
+  const logoSrc = typeof localStorage !== 'undefined' ? localStorage.getItem('acm_theme_logo') : null
+
+  if (!pageReady) return null
+
   return (
     <div>
+      <SmartLoader loading={extracting} logoSrc={logoSrc} />
       <WizardNav currentStep={2} />
       <div className="step-header">
         <h1>Agregar Comparables</h1>
@@ -245,7 +254,7 @@ export default function AgregarComparables() {
                       disabled={extracting}
                       style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
                     >
-                      {extracting ? <span className="spinner" /> : '⬇ Extraer datos'}
+                      {extracting ? 'Extrayendo...' : '⬇ Extraer datos'}
                     </button>
                   )}
                 </div>

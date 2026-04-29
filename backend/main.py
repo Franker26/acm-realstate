@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import re
@@ -13,6 +14,7 @@ from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 import bcrypt as _bcrypt_lib
 from pydantic import BaseModel as PydanticBase
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -100,6 +102,12 @@ from schemas import (
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
+        # Postgres: add new enum value without a full migration
+        try:
+            db.execute(text("ALTER TYPE stageacm ADD VALUE IF NOT EXISTS 'Cancelado'"))
+            db.commit()
+        except Exception:
+            db.rollback()
         for acm in db.query(ACM).all():
             if acm.updated_at is None:
                 acm.updated_at = acm.fecha_creacion
@@ -326,9 +334,9 @@ def _serialize_approval_comment(comment: ApprovalComment) -> ApprovalCommentRead
 
 def _mark_acm_pending_if_required(acm: ACM):
     if _requires_approval(acm):
-        acm.approval_status = ApprovalStatus.pendiente
-        acm.approved_by_id = None
-        acm.approved_at = None
+        # Only transition to pending if not already in an active approval state
+        if acm.approval_status == ApprovalStatus.no_requerida:
+            acm.approval_status = ApprovalStatus.pendiente
     else:
         acm.approval_status = ApprovalStatus.no_requerida
         acm.approved_by_id = None
@@ -758,6 +766,38 @@ class ZonapropExtractRequest(PydanticBase):
     url: str
 
 
+_ZONAPROP_RETRY_DELAYS = [1, 3]  # seconds between attempts (3 total attempts)
+_ZONAPROP_RETRYABLE_STATUSES = {403, 429, 503, 502}
+
+
+async def _fetch_zonaprop(url: str) -> str:
+    last_exc: Exception | None = None
+    for attempt in range(len(_ZONAPROP_RETRY_DELAYS) + 1):
+        try:
+            async with httpx.AsyncClient(
+                headers=_BROWSER_HEADERS, follow_redirects=True, timeout=10
+            ) as client:
+                r = await client.get(url)
+            if r.status_code in _ZONAPROP_RETRYABLE_STATUSES:
+                raise httpx.HTTPStatusError(
+                    f"status {r.status_code}", request=r.request, response=r
+                )
+            r.raise_for_status()
+            return r.text
+        except httpx.HTTPStatusError as e:
+            last_exc = e
+        except Exception as e:
+            last_exc = e
+        if attempt < len(_ZONAPROP_RETRY_DELAYS):
+            await asyncio.sleep(_ZONAPROP_RETRY_DELAYS[attempt])
+    raise HTTPException(
+        422,
+        "No pudimos acceder automáticamente a los datos en este momento. "
+        "Esto puede deberse a restricciones temporales del sitio. "
+        "Podés intentar nuevamente o completar los datos manualmente.",
+    )
+
+
 @app.post("/api/zonaprop/extract")
 async def extract_zonaprop(body: ZonapropExtractRequest):
     url = body.url.strip()
@@ -765,12 +805,7 @@ async def extract_zonaprop(body: ZonapropExtractRequest):
         raise HTTPException(400, "La URL debe ser de zonaprop.com.ar")
 
     try:
-        async with httpx.AsyncClient(headers=_BROWSER_HEADERS, follow_redirects=True, timeout=20) as client:
-            r = await client.get(url)
-        if r.status_code == 403:
-            raise HTTPException(422, "Zonaprop bloqueó el acceso. Intentá de nuevo en unos segundos o ingresá los datos manualmente.")
-        r.raise_for_status()
-        html = r.text
+        html = await _fetch_zonaprop(url)
     except HTTPException:
         raise
     except Exception as e:
