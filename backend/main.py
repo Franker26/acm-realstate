@@ -13,7 +13,6 @@ from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 import bcrypt as _bcrypt_lib
 from pydantic import BaseModel as PydanticBase
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -97,40 +96,9 @@ from schemas import (
     UserUpdate,
 )
 
-_ENUM_NORMALIZATIONS = [
-    (
-        "acm",
-        "stage",
-        {
-            "Borrador": "borrador",
-            "En progreso": "en_progreso",
-            "Finalizado": "finalizado",
-        },
-    ),
-    (
-        "acm",
-        "approval_status",
-        {
-            "No requerida": "no_requerida",
-            "Pendiente": "pendiente",
-            "Aprobado": "aprobado",
-            "Cambios solicitados": "cambios_solicitados",
-        },
-    ),
-]
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    with engine.connect() as conn:
-        for table, column, replacements in _ENUM_NORMALIZATIONS:
-            for old_value, new_value in replacements.items():
-                conn.execute(
-                    text(f"UPDATE {table} SET {column} = :new_value WHERE {column} = :old_value"),
-                    {"new_value": new_value, "old_value": old_value},
-                )
-            conn.commit()
     with SessionLocal() as db:
         for acm in db.query(ACM).all():
             if acm.updated_at is None:
