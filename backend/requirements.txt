@@ -9,3 +9,4 @@ python-jose[cryptography]==3.3.0
 bcrypt==4.2.0
 mangum==0.17.0
 psycopg2-binary
+
