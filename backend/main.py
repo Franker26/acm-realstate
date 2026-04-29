@@ -1,4 +1,3 @@
-import io
 import json
 import os
 import re
@@ -10,7 +9,7 @@ import httpx
 from bs4 import BeautifulSoup
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 import bcrypt as _bcrypt_lib
 from pydantic import BaseModel as PydanticBase
@@ -32,15 +31,11 @@ from models import (
     User,
     engine,
 )
-from pdf_generator import generate_pdf
-
 # --- Auth config ---
 
 _SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-production")
 _ALGORITHM = "HS256"
 _TOKEN_EXPIRE_DAYS = 7
-_ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "acm1234")
 
 # Rutas que no requieren token
 _PUBLIC_PATHS = {
@@ -95,31 +90,12 @@ from schemas import (
     ComparableRead,
     ComparableResultado,
     ComparableUpdate,
-    PdfRequest,
     PonderadoresDefaults,
     ResultadoResponse,
     UserCreate,
     UserRead,
     UserUpdate,
 )
-
-_MIGRATIONS = [
-    ("acm",        "superficie_semicubierta REAL"),
-    ("comparable", "superficie_semicubierta REAL"),
-    ("comparable", "factor_cochera REAL"),
-    ("comparable", "factor_pileta REAL"),
-    ("comparable", "factor_luminosidad REAL"),
-    ("comparable", "factor_vistas REAL"),
-    ("comparable", "factor_amenities REAL"),
-    ("acm",        "owner_id INTEGER REFERENCES users(id)"),
-    ("acm",        "stage VARCHAR DEFAULT 'borrador'"),
-    ("users",      "is_approver BOOLEAN DEFAULT 0"),
-    ("users",      "needs_approval BOOLEAN DEFAULT 0"),
-    ("acm",        "updated_at DATETIME"),
-    ("acm",        "approval_status VARCHAR DEFAULT 'No requerida'"),
-    ("acm",        "approved_by_id INTEGER REFERENCES users(id)"),
-    ("acm",        "approved_at DATETIME"),
-]
 
 _ENUM_NORMALIZATIONS = [
     (
@@ -148,12 +124,6 @@ _ENUM_NORMALIZATIONS = [
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with engine.connect() as conn:
-        for table, col_def in _MIGRATIONS:
-            try:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_def}"))
-                conn.commit()
-            except Exception:
-                pass  # columna ya existe
         for table, column, replacements in _ENUM_NORMALIZATIONS:
             for old_value, new_value in replacements.items():
                 conn.execute(
@@ -161,21 +131,7 @@ async def lifespan(app: FastAPI):
                     {"new_value": new_value, "old_value": old_value},
                 )
             conn.commit()
-    # Crear admin por defecto si no existe ningún usuario
     with SessionLocal() as db:
-        if not db.query(User).first():
-            db.add(User(
-                username=_ADMIN_USERNAME,
-                hashed_password=_hash_password(_ADMIN_PASSWORD),
-                is_admin=True,
-                is_approver=True,
-            ))
-            db.commit()
-        else:
-            admin = db.query(User).filter(User.username == _ADMIN_USERNAME).first()
-            if admin and admin.is_admin and not admin.is_approver:
-                admin.is_approver = True
-                db.commit()
         for acm in db.query(ACM).all():
             if acm.updated_at is None:
                 acm.updated_at = acm.fecha_creacion
@@ -409,14 +365,6 @@ def _mark_acm_pending_if_required(acm: ACM):
         acm.approval_status = ApprovalStatus.no_requerida
         acm.approved_by_id = None
         acm.approved_at = None
-
-
-def _require_export_approval(acm: ACM):
-    if _requires_approval(acm) and acm.approval_status != ApprovalStatus.aprobado:
-        raise HTTPException(
-            403,
-            "Esta tasación requiere aprobación antes de exportar el informe",
-        )
 
 
 _BRANDING_DEFAULTS = {
@@ -715,67 +663,6 @@ def get_resultado(acm_id: int, request: Request, db: Session = Depends(get_db)):
 
     kpis = calc.compute_kpis(adjusted_prices, subject.superficie_homogeneizada)
     return ResultadoResponse(acm_id=acm_id, comparables=comp_resultados, **kpis)
-
-
-@app.post("/api/acm/{acm_id}/pdf")
-def generate_acm_pdf(acm_id: int, body: PdfRequest, request: Request, db: Session = Depends(get_db)):
-    acm = _get_acm_checked(acm_id, request, db)
-    if not acm.comparables:
-        raise HTTPException(status_code=422, detail="El ACM no tiene comparables")
-    _require_export_approval(acm)
-
-    acm_read = _build_acm_read(acm)
-
-    subject = _make_snapshot(acm)
-    comp_resultados = []
-    adjusted_prices = []
-    for comp in acm.comparables:
-        comp_snap = _make_snapshot(comp)
-        overrides = {
-            "factor_antiguedad": comp.factor_antiguedad,
-            "factor_estado": comp.factor_estado,
-            "factor_calidad": comp.factor_calidad,
-            "factor_superficie": comp.factor_superficie,
-            "factor_piso": comp.factor_piso,
-            "factor_orientacion": comp.factor_orientacion,
-            "factor_distribucion": comp.factor_distribucion,
-            "factor_oferta": comp.factor_oferta,
-            "factor_oportunidad": comp.factor_oportunidad,
-            "factor_cochera": comp.factor_cochera,
-            "factor_pileta": comp.factor_pileta,
-            "factor_luminosidad": comp.factor_luminosidad,
-            "factor_vistas": comp.factor_vistas,
-            "factor_amenities": comp.factor_amenities,
-        }
-        r = calc.compute_adjusted_price(
-            subject=subject,
-            comp=comp_snap,
-            precio=comp.precio,
-            dias_mercado=comp.dias_mercado,
-            oportunidad_mercado=comp.oportunidad_mercado or False,
-            overrides=overrides,
-        )
-        adjusted_prices.append(r["precio_ajustado_m2"])
-        comp_resultados.append(ComparableResultado(
-            id=comp.id,
-            direccion=comp.direccion,
-            url=comp.url,
-            precio=comp.precio,
-            precio_m2_publicado=r["precio_m2_publicado"],
-            factor_total=r["factor_total"],
-            precio_ajustado_m2=r["precio_ajustado_m2"],
-            detalle_factores=r["detalle_factores"],
-        ))
-
-    kpis = calc.compute_kpis(adjusted_prices, subject.superficie_homogeneizada)
-    resultado = ResultadoResponse(acm_id=acm_id, comparables=comp_resultados, **kpis)
-
-    pdf_bytes = generate_pdf(acm_read, resultado, body.chart_image_b64)
-    return StreamingResponse(
-        io.BytesIO(pdf_bytes),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="acm_{acm_id}.pdf"'},
-    )
 
 
 # --- Ponderadores defaults (también sirve como liveness probe) ---
