@@ -210,7 +210,7 @@ function AppHeader() {
     navigate('/login')
   }
 
-  if (location.pathname === '/login') return null
+  if (location.pathname === '/login' || location.pathname.startsWith('/admin')) return null
 
   const navItems = [
     { to: '/', label: 'Tablero', visible: true },
@@ -311,8 +311,10 @@ function AppRoutes() {
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
       <Route path="/ml-callback" element={<MlCallback />} />
       <Route path="/admin" element={<AdminLogin />} />
+      <Route path="/admin/" element={<AdminLogin />} />
       <Route path="/admin/companies" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       <Route path="/admin/companies/:id" element={<AdminRoute><AdminCompanyDetail /></AdminRoute>} />
+      <Route path="/admin/*" element={<AdminLogin />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   )
