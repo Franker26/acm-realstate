@@ -192,6 +192,21 @@ async def lifespan(app: FastAPI):
                     value=setting.value,
                 ))
         db.commit()
+
+        # 5. Bootstrap superadmin from env vars (only if none exists)
+        sa_user = os.getenv("SUPERADMIN_USERNAME")
+        sa_pass = os.getenv("SUPERADMIN_PASSWORD")
+        if sa_user and sa_pass:
+            exists = db.query(User).filter(User.is_superadmin.is_(True)).first()
+            if not exists:
+                db.add(User(
+                    username=sa_user,
+                    hashed_password=_hash_password(sa_pass),
+                    is_superadmin=True,
+                    is_admin=False,
+                    company_id=None,
+                ))
+                db.commit()
     yield
 
 
