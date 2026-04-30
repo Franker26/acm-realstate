@@ -1,10 +1,24 @@
 import asyncio
 import json
+import logging
 import os
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+logger = logging.getLogger("acm")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+
+STEP_ORDER = ["sujeto", "comparables", "ponderadores", "resultados", "exportar"]
+STAGE_ORDER = ["nuevo", "en_progreso", "finalizado", "cancelado"]
+
+_STAGE_MIGRATION = {
+    "Borrador": "nuevo",
+    "En progreso": "en_progreso",
+    "Finalizado": "finalizado",
+    "Cancelado": "cancelado",
+}
 
 import httpx
 from bs4 import BeautifulSoup
@@ -93,6 +107,8 @@ from schemas import (
     ComparableUpdate,
     PonderadoresDefaults,
     ResultadoResponse,
+    StageUpdateRequest,
+    StepUpdateRequest,
     UserCreate,
     UserRead,
     UserUpdate,
@@ -102,17 +118,32 @@ from schemas import (
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
-        # Postgres: add new enum value without a full migration
-        try:
-            db.execute(text("ALTER TYPE stageacm ADD VALUE IF NOT EXISTS 'Cancelado'"))
-            db.commit()
-        except Exception:
-            db.rollback()
+        # Postgres: convert stage column from native enum to varchar
+        for stmt in (
+            "ALTER TABLE acm ALTER COLUMN stage TYPE VARCHAR USING stage::text",
+            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS current_step VARCHAR DEFAULT 'sujeto'",
+            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS steps_completed VARCHAR DEFAULT '[]'",
+            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
+        ):
+            try:
+                db.execute(text(stmt))
+                db.commit()
+            except Exception:
+                db.rollback()
+
         for acm in db.query(ACM).all():
             if acm.updated_at is None:
                 acm.updated_at = acm.fecha_creacion
             if acm.approval_status is None:
                 _mark_acm_pending_if_required(acm)
+            # Migrate legacy stage values
+            if acm.stage in _STAGE_MIGRATION:
+                acm.stage = _STAGE_MIGRATION[acm.stage]
+            # Set defaults for new step fields
+            if not acm.current_step:
+                acm.current_step = "sujeto"
+            if not acm.steps_completed:
+                acm.steps_completed = "[]"
         db.commit()
     yield
 
@@ -306,8 +337,17 @@ def update_branding_settings(
     return _get_branding_settings(db)
 
 
+def _parse_steps(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        return json.loads(raw)
+    except Exception:
+        return []
+
+
 def _get_acm_or_404(acm_id: int, db: Session) -> ACM:
-    acm = db.query(ACM).filter(ACM.id == acm_id).first()
+    acm = db.query(ACM).filter(ACM.id == acm_id, ACM.deleted_at.is_(None)).first()
     if not acm:
         raise HTTPException(status_code=404, detail=f"ACM {acm_id} no encontrado")
     return acm
@@ -445,10 +485,16 @@ def create_acm(body: ACMCreate, request: Request, db: Session = Depends(get_db))
     return _build_acm_read(acm)
 
 
+@app.get("/api/acm/stages")
+def get_stages():
+    """Ordered stage list — single source of truth for frontend."""
+    return {"stages": STAGE_ORDER}
+
+
 @app.get("/api/acm", response_model=list[ACMSummary])
 def list_acms(request: Request, db: Session = Depends(get_db)):
     current = _current_user(request, db)
-    query = db.query(ACM).order_by(ACM.fecha_creacion.desc())
+    query = db.query(ACM).filter(ACM.deleted_at.is_(None)).order_by(ACM.fecha_creacion.desc())
     if not current.is_admin:
         query = query.filter(ACM.owner_id == current.id)
     result = []
@@ -488,8 +534,42 @@ def delete_acm(acm_id: int, request: Request, db: Session = Depends(get_db)):
     current = _current_user(request, db)
     acm = _get_acm_or_404(acm_id, db)
     _check_acm_access(acm, current)
-    db.delete(acm)
+    acm.deleted_at = datetime.utcnow()
     db.commit()
+    logger.info("soft_delete acm=%d by=%s", acm_id, current.username)
+
+
+@app.patch("/api/acm/{acm_id}/stage", response_model=ACMRead)
+def update_stage(acm_id: int, body: StageUpdateRequest, request: Request, db: Session = Depends(get_db)):
+    if body.stage not in STAGE_ORDER:
+        raise HTTPException(400, f"Etapa inválida: '{body.stage}'. Válidas: {STAGE_ORDER}")
+    acm = _get_acm_checked(acm_id, request, db)
+    old_stage = acm.stage
+    acm.stage = body.stage
+    _mark_acm_pending_if_required(acm)
+    db.commit()
+    db.refresh(acm)
+    logger.info("stage_change acm=%d %s→%s", acm_id, old_stage, body.stage)
+    return _build_acm_read(acm)
+
+
+@app.patch("/api/acm/{acm_id}/step", response_model=ACMRead)
+def update_step(acm_id: int, body: StepUpdateRequest, request: Request, db: Session = Depends(get_db)):
+    if body.step not in STEP_ORDER:
+        raise HTTPException(400, f"Step inválido: '{body.step}'. Válidos: {STEP_ORDER}")
+    acm = _get_acm_checked(acm_id, request, db)
+    steps = _parse_steps(acm.steps_completed)
+    if body.completed:
+        if body.step not in steps:
+            steps.append(body.step)
+    else:
+        steps = [s for s in steps if s != body.step]
+    acm.steps_completed = json.dumps(steps)
+    acm.current_step = body.step
+    db.commit()
+    db.refresh(acm)
+    logger.info("step_update acm=%d step=%s completed=%s", acm_id, body.step, body.completed)
+    return _build_acm_read(acm)
 
 
 def _build_acm_read(acm: ACM) -> ACMRead:

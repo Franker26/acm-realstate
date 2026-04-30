@@ -51,10 +51,10 @@ class Distribucion(str, enum.Enum):
 
 
 class StageACM(str, enum.Enum):
-    borrador = "Borrador"
-    en_progreso = "En progreso"
-    finalizado = "Finalizado"
-    cancelado = "Cancelado"
+    nuevo       = "nuevo"
+    en_progreso = "en_progreso"
+    finalizado  = "finalizado"
+    cancelado   = "cancelado"
 
 
 class ApprovalStatus(str, enum.Enum):
@@ -88,7 +88,10 @@ class ACM(Base):
     distribucion = Column(Enum(Distribucion), nullable=True)
 
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    stage = Column(Enum(StageACM), nullable=True, default=StageACM.borrador)
+    stage = Column(String, nullable=True, default="nuevo")
+    current_step = Column(String, nullable=True, default="sujeto")
+    steps_completed = Column(String, nullable=True, default="[]")
+    deleted_at = Column(DateTime, nullable=True)
     approval_status = Column(
         Enum(ApprovalStatus), nullable=False, default=ApprovalStatus.no_requerida
     )
