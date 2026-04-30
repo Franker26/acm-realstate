@@ -337,31 +337,54 @@ def update_branding_settings(
     return _get_branding_settings(db)
 
 
-class ScraperSettings(PydanticBase):
+class IntegrationSettings(PydanticBase):
     scraper_service_url: Optional[str] = None
+    scraper_service_token: Optional[str] = None
+    ml_app_id: Optional[str] = None
+    ml_app_secret: Optional[str] = None
 
 
-def _get_scraper_url(db: Session) -> str | None:
-    setting = db.query(AppSetting).filter(AppSetting.key == "scraper_service_url").first()
-    db_val = setting.value if setting and setting.value else None
-    return db_val or _SCRAPER_SERVICE_URL or None
+_INTEGRATION_KEYS = ["scraper_service_url", "scraper_service_token", "ml_app_id", "ml_app_secret"]
 
 
-@app.get("/api/settings/scraper", response_model=ScraperSettings)
-def get_scraper_settings(db: Session = Depends(get_db)):
-    return ScraperSettings(scraper_service_url=_get_scraper_url(db))
+def _get_integration_settings(db: Session) -> IntegrationSettings:
+    payload = {}
+    for key in _INTEGRATION_KEYS:
+        s = db.query(AppSetting).filter(AppSetting.key == key).first()
+        env_fallback = {"scraper_service_url": _SCRAPER_SERVICE_URL, "scraper_service_token": _SCRAPER_SERVICE_TOKEN}
+        payload[key] = (s.value if s and s.value else None) or env_fallback.get(key)
+    return IntegrationSettings(**payload)
 
 
-@app.put("/api/settings/scraper", response_model=ScraperSettings)
-def update_scraper_settings(body: ScraperSettings, request: Request, db: Session = Depends(get_db)):
+def _get_integration_settings_dict(db: Session) -> dict:
+    return _get_integration_settings(db).model_dump()
+
+
+@app.get("/api/settings/integrations", response_model=IntegrationSettings)
+def get_integration_settings(request: Request, db: Session = Depends(get_db)):
     _require_admin(request, db)
-    setting = db.query(AppSetting).filter(AppSetting.key == "scraper_service_url").first()
-    if not setting:
-        setting = AppSetting(key="scraper_service_url")
-        db.add(setting)
-    setting.value = body.scraper_service_url or ""
+    s = _get_integration_settings(db)
+    # Mask secrets in response
+    if s.ml_app_secret:
+        s.ml_app_secret = "***"
+    if s.scraper_service_token:
+        s.scraper_service_token = "***"
+    return s
+
+
+@app.put("/api/settings/integrations", response_model=IntegrationSettings)
+def update_integration_settings(body: IntegrationSettings, request: Request, db: Session = Depends(get_db)):
+    _require_admin(request, db)
+    for key, value in body.model_dump().items():
+        if value == "***":
+            continue  # skip masked fields — don't overwrite with placeholder
+        s = db.query(AppSetting).filter(AppSetting.key == key).first()
+        if not s:
+            s = AppSetting(key=key)
+            db.add(s)
+        s.value = value or ""
     db.commit()
-    return ScraperSettings(scraper_service_url=_get_scraper_url(db))
+    return get_integration_settings(request, db)
 
 
 def _parse_steps(raw: str | None) -> list[str]:
@@ -755,7 +778,24 @@ def get_defaults():
     return PonderadoresDefaults(**calc.DEFAULTS)
 
 
-# --- Zonaprop extractor ---
+# --- Integrations ---
+
+_SCRAPER_SERVICE_URL = os.getenv("SCRAPER_SERVICE_URL")
+_SCRAPER_SERVICE_TOKEN = os.getenv("SCRAPER_SERVICE_TOKEN", "")
+
+
+class ExtractRequest(PydanticBase):
+    url: str
+
+
+@app.post("/api/extract")
+async def extract_property(body: ExtractRequest, db: Session = Depends(get_db)):
+    from integrations import extract as integration_extract
+    settings = _get_integration_settings_dict(db)
+    return await integration_extract(body.url.strip(), settings)
+
+
+# --- Legacy Zonaprop parser (kept for scraper microservice — not used by main app) ---
 
 _BROWSER_HEADERS = {
     "User-Agent": (
@@ -764,8 +804,6 @@ _BROWSER_HEADERS = {
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "es-AR,es;q=0.9",
-    # Accept-Encoding intentionally omitted: httpx adds it and decompresses transparently.
-    # Setting it manually bypasses httpx's auto-decompression and returns raw compressed bytes.
 }
 
 
@@ -989,18 +1027,7 @@ def _parse_next_data(html: str) -> dict:
     return result
 
 
-class ZonapropExtractRequest(PydanticBase):
-    url: str
-
-
-_ZONAPROP_RETRY_DELAYS = [1, 3]  # seconds between attempts (3 total attempts)
-_ZONAPROP_RETRYABLE_STATUSES = {403, 429, 503, 502}
-# When set, extraction is delegated to the local scraper microservice (residential IP).
-_SCRAPER_SERVICE_URL = os.getenv("SCRAPER_SERVICE_URL")
-_SCRAPER_SERVICE_TOKEN = os.getenv("SCRAPER_SERVICE_TOKEN", "")
-
-
-async def _fetch_zonaprop(url: str) -> str:
+async def _fetch_zonaprop(url: str) -> str:  # kept for scraper microservice compatibility
     last_exc: Exception | None = None
     for attempt in range(len(_ZONAPROP_RETRY_DELAYS) + 1):
         try:
@@ -1028,43 +1055,3 @@ async def _fetch_zonaprop(url: str) -> str:
     )
 
 
-@app.post("/api/zonaprop/extract")
-async def extract_zonaprop(body: ZonapropExtractRequest, db: Session = Depends(get_db)):
-    url = body.url.strip()
-    if "zonaprop.com.ar" not in url:
-        raise HTTPException(400, "La URL debe ser de zonaprop.com.ar")
-
-    # Delegate to local scraper microservice if configured (bypasses cloud IP blocking)
-    scraper_url = _get_scraper_url(db)
-    if scraper_url:
-        try:
-            headers = {"Authorization": f"Bearer {_SCRAPER_SERVICE_TOKEN}"} if _SCRAPER_SERVICE_TOKEN else {}
-            async with httpx.AsyncClient(timeout=30) as client:
-                r = await client.post(f"{scraper_url}/extract", json={"url": url}, headers=headers)
-            if r.status_code == 200:
-                return r.json()
-            raise HTTPException(r.status_code, r.text)
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(502, f"Scraper service unavailable: {e}")
-
-    try:
-        html = await _fetch_zonaprop(url)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(422, f"No se pudo acceder a la URL: {e}")
-
-    # Try __NEXT_DATA__ first (newer listing pages), fall back to SSR HTML parser
-    result = _parse_next_data(html)
-    if not result:
-        result = _parse_zonaprop_html(html)
-
-    if not result:
-        raise HTTPException(
-            422,
-            "No se pudieron extraer datos de la página. Puede estar inactiva o el formato cambió.",
-        )
-
-    return result

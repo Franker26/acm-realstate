@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { addComparable, deleteComparable, extractZonaprop, getACM, updateComparable } from '../api.js'
+import { addComparable, deleteComparable, extractProperty, getACM, updateComparable } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 import PropertyForm from '../components/PropertyForm.jsx'
 import SmartLoader from '../components/SmartLoader.jsx'
@@ -93,12 +93,15 @@ export default function AgregarComparables() {
     return err
   }
 
+  const SUPPORTED_SOURCES = ['zonaprop.com.ar', 'mercadolibre.com.ar']
+  const isSupportedUrl = SUPPORTED_SOURCES.some((s) => form.url?.includes(s))
+
   async function handleExtract() {
-    if (!form.url || !form.url.includes('zonaprop.com.ar')) return
+    if (!form.url || !isSupportedUrl) return
     setExtracting(true)
     setExtractError(null)
     try {
-      const data = await extractZonaprop(form.url)
+      const data = await extractProperty(form.url)
       setExtractPreview(data)
     } catch (e) {
       setExtractError(e.message)
@@ -266,8 +269,8 @@ export default function AgregarComparables() {
                 <div className="inline-control-row">
                   <input type="url" name="url" value={form.url} tabIndex={1}
                     onChange={(e) => { handleChange('url', e.target.value); setExtractError(null) }}
-                    placeholder="https://www.zonaprop.com.ar/..." />
-                  {form.url.includes('zonaprop.com.ar') && (
+                    placeholder="https://www.zonaprop.com.ar/ o mercadolibre.com.ar/..." />
+                  {isSupportedUrl && (
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"

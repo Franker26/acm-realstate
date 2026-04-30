@@ -67,7 +67,7 @@ export const getResultado = (acmId) => request('GET', `/api/acm/${acmId}/resulta
 export const getDefaults = () =>
   request('GET', '/api/ponderadores/defaults', undefined, { auth: false, redirectOn401: false })
 
-export const extractZonaprop = (url) => request('POST', '/api/zonaprop/extract', { url })
+export const extractProperty = (url) => request('POST', '/api/extract', { url })
 
 export const listUsers = () => request('GET', '/api/users')
 export const createUser = (data) => request('POST', '/api/users', data)
@@ -82,5 +82,5 @@ export const reviewACM = (id, data) => request('PUT', `/api/acm/${id}/approval`,
 export const getBrandingSettings = () =>
   request('GET', '/api/settings/branding', undefined, { auth: false, redirectOn401: false })
 export const updateBrandingSettings = (data) => request('PUT', '/api/settings/branding', data)
-export const getScraperSettings = () => request('GET', '/api/settings/scraper')
-export const updateScraperSettings = (data) => request('PUT', '/api/settings/scraper', data)
+export const getIntegrationSettings = () => request('GET', '/api/settings/integrations')
+export const updateIntegrationSettings = (data) => request('PUT', '/api/settings/integrations', data)
