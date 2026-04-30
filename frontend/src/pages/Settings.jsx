@@ -5,10 +5,11 @@ import {
   createUser,
   deleteUser,
   getBrandingSettings,
-  getScraperSettings,
+  getIntegrationSettings,
   listUsers,
+  testMlCredentials,
   updateBrandingSettings,
-  updateScraperSettings,
+  updateIntegrationSettings,
   updateUser,
 } from '../api.js'
 import {
@@ -416,72 +417,144 @@ function ThemeTab() {
   )
 }
 
-function ScraperTab() {
-  const [url, setUrl] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [message, setMessage] = useState(null)
-  const [error, setError] = useState(null)
+function IntegrationsTab() {
+  const [settings, setSettings] = useState({
+    scraper_service_url: '', scraper_service_token: '', ml_app_id: '', ml_app_secret: '',
+  })
+  const [saving, setSaving] = useState(null)   // 'zonaprop' | 'ml'
+  const [testing, setTesting] = useState(null) // 'zonaprop' | 'ml'
+  const [msgs, setMsgs] = useState({})
+  const [errors, setErrors] = useState({})
 
   useEffect(() => {
-    getScraperSettings()
-      .then((d) => setUrl(d.scraper_service_url || ''))
-      .catch((e) => setError(e.message))
+    getIntegrationSettings()
+      .then((d) => setSettings({
+        scraper_service_url: d.scraper_service_url || '',
+        scraper_service_token: d.scraper_service_token === '***' ? '' : (d.scraper_service_token || ''),
+        ml_app_id: d.ml_app_id || '',
+        ml_app_secret: d.ml_app_secret === '***' ? '' : (d.ml_app_secret || ''),
+      }))
+      .catch(() => {})
   }, [])
 
-  async function handleSave() {
-    setSaving(true); setMessage(null); setError(null)
+  function set(key, val) { setSettings((p) => ({ ...p, [key]: val })) }
+  function msg(section, text) { setMsgs((p) => ({ ...p, [section]: text })) }
+  function err(section, text) { setErrors((p) => ({ ...p, [section]: text })) }
+
+  async function saveZonaprop() {
+    setSaving('zonaprop'); msg('zonaprop', null); err('zonaprop', null)
     try {
-      await updateScraperSettings({ scraper_service_url: url.trim() || null })
-      setMessage('URL guardada.')
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSaving(false)
-    }
+      await updateIntegrationSettings({
+        scraper_service_url: settings.scraper_service_url.trim() || null,
+        scraper_service_token: settings.scraper_service_token.trim() || null,
+      })
+      msg('zonaprop', 'Guardado.')
+    } catch (e) { err('zonaprop', e.message) } finally { setSaving(null) }
   }
 
-  async function handleTest() {
-    if (!url.trim()) return
-    setTesting(true); setMessage(null); setError(null)
+  async function testZonaprop() {
+    const url = settings.scraper_service_url.trim()
+    if (!url) return
+    setTesting('zonaprop'); msg('zonaprop', null); err('zonaprop', null)
     try {
-      const res = await fetch(`${url.trim()}/health`)
-      if (res.ok) setMessage('✓ Microservicio responde correctamente.')
-      else setError(`El servicio respondió con status ${res.status}.`)
-    } catch (e) {
-      setError('No se pudo conectar. Verificá que el túnel esté activo.')
-    } finally {
-      setTesting(false)
-    }
+      const res = await fetch(`${url}/health`)
+      if (res.ok) msg('zonaprop', '✓ Microservicio responde correctamente.')
+      else err('zonaprop', `Status ${res.status} — verificá que el túnel esté activo.`)
+    } catch { err('zonaprop', 'No se pudo conectar. Verificá que el túnel esté activo.') }
+    finally { setTesting(null) }
+  }
+
+  async function saveMl() {
+    setSaving('ml'); msg('ml', null); err('ml', null)
+    try {
+      await updateIntegrationSettings({
+        ml_app_id: settings.ml_app_id.trim() || null,
+        ml_app_secret: settings.ml_app_secret.trim() || null,
+      })
+      msg('ml', 'Guardado.')
+    } catch (e) { err('ml', e.message) } finally { setSaving(null) }
+  }
+
+  async function testMl() {
+    setTesting('ml'); msg('ml', null); err('ml', null)
+    try {
+      await testMlCredentials()
+      msg('ml', '✓ Credenciales válidas — token obtenido correctamente.')
+    } catch (e) { err('ml', e.message) } finally { setTesting(null) }
   }
 
   return (
-    <div className="settings-surface settings-surface--narrow">
-      <div className="settings-section-header">
-        <div>
-          <h2>Microservicio de extracción</h2>
-          <p>
-            URL del scraper local usada para extraer datos de Zonaprop desde una IP residencial.
-            Dejá vacío para usar el fetch directo en desarrollo local.
-          </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      {/* Zonaprop */}
+      <div className="settings-surface settings-surface--narrow">
+        <div className="settings-section-header">
+          <div>
+            <h2>Zonaprop</h2>
+            <p>Extracción via microservicio local en atlas (IP residencial). Necesitás el túnel activo.</p>
+          </div>
+        </div>
+        {errors.zonaprop && <div className="alert alert-error">{errors.zonaprop}</div>}
+        {msgs.zonaprop && <div className="alert alert-success">{msgs.zonaprop}</div>}
+        <label style={{ fontSize: 13, color: '#555', display: 'block', marginBottom: 4 }}>URL del microservicio</label>
+        <input
+          type="url"
+          placeholder="https://xxx.trycloudflare.com"
+          value={settings.scraper_service_url}
+          onChange={(e) => set('scraper_service_url', e.target.value)}
+        />
+        <label style={{ fontSize: 13, color: '#555', display: 'block', margin: '12px 0 4px' }}>Token (opcional)</label>
+        <input
+          type="password"
+          placeholder="Bearer token del servicio"
+          value={settings.scraper_service_token}
+          onChange={(e) => set('scraper_service_token', e.target.value)}
+        />
+        <div className="settings-actions-row" style={{ marginTop: 16 }}>
+          <button className="btn btn-primary" onClick={saveZonaprop} disabled={saving === 'zonaprop'}>
+            {saving === 'zonaprop' && <span className="spinner" />} Guardar
+          </button>
+          <button className="btn btn-secondary" onClick={testZonaprop} disabled={testing === 'zonaprop' || !settings.scraper_service_url.trim()}>
+            {testing === 'zonaprop' && <span className="spinner" />} Testear conexión
+          </button>
         </div>
       </div>
-      {error && <div className="alert alert-error">{error}</div>}
-      {message && <div className="alert alert-success">{message}</div>}
-      <input
-        type="url"
-        placeholder="https://xxx.trycloudflare.com"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-      />
-      <div className="settings-actions-row">
-        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-          {saving && <span className="spinner" />} Guardar
-        </button>
-        <button className="btn btn-secondary" onClick={handleTest} disabled={testing || !url.trim()}>
-          {testing && <span className="spinner" />} Testear conexión
-        </button>
+
+      {/* MercadoLibre */}
+      <div className="settings-surface settings-surface--narrow">
+        <div className="settings-section-header">
+          <div>
+            <h2>MercadoLibre Inmuebles</h2>
+            <p>API oficial. Registrá una app en developers.mercadolibre.com.ar y pegá las credenciales.</p>
+          </div>
+        </div>
+        {errors.ml && <div className="alert alert-error">{errors.ml}</div>}
+        {msgs.ml && <div className="alert alert-success">{msgs.ml}</div>}
+        <label style={{ fontSize: 13, color: '#555', display: 'block', marginBottom: 4 }}>App ID</label>
+        <input
+          type="text"
+          placeholder="1234567890"
+          value={settings.ml_app_id}
+          onChange={(e) => set('ml_app_id', e.target.value)}
+        />
+        <label style={{ fontSize: 13, color: '#555', display: 'block', margin: '12px 0 4px' }}>Secret key</label>
+        <input
+          type="password"
+          placeholder="••••••••••••••••"
+          value={settings.ml_app_secret}
+          onChange={(e) => set('ml_app_secret', e.target.value)}
+        />
+        <div className="settings-actions-row" style={{ marginTop: 16 }}>
+          <button className="btn btn-primary" onClick={saveMl} disabled={saving === 'ml'}>
+            {saving === 'ml' && <span className="spinner" />} Guardar
+          </button>
+          <button className="btn btn-secondary" onClick={testMl}
+            disabled={testing === 'ml' || !settings.ml_app_id.trim() || !settings.ml_app_secret.trim()}>
+            {testing === 'ml' && <span className="spinner" />} Testear credenciales
+          </button>
+        </div>
       </div>
+
     </div>
   )
 }
@@ -529,7 +602,7 @@ export default function Settings() {
     user?.is_admin ? { key: 'usuarios', label: 'Usuarios y acceso', description: 'Roles, permisos y contraseñas.' } : null,
     { key: 'mapa', label: 'OpenStreetMap', description: 'Control de autocompletado de direcciones.' },
     user?.is_admin ? { key: 'tema', label: 'Personalización', description: 'Nombre, color y logotipo.' } : null,
-    user?.is_admin ? { key: 'scraper', label: 'Scraper', description: 'Conexión con el microservicio local.' } : null,
+    user?.is_admin ? { key: 'integraciones', label: 'Integraciones', description: 'Zonaprop, MercadoLibre y más.' } : null,
   ].filter(Boolean)
 
   return (
@@ -558,7 +631,7 @@ export default function Settings() {
       )}
       {tab === 'mapa' && <MapTab />}
       {tab === 'tema' && user?.is_admin && <ThemeTab />}
-      {tab === 'scraper' && user?.is_admin && <ScraperTab />}
+      {tab === 'integraciones' && user?.is_admin && <IntegrationsTab />}
     </div>
   )
 }

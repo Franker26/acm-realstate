@@ -387,6 +387,24 @@ def update_integration_settings(body: IntegrationSettings, request: Request, db:
     return get_integration_settings(request, db)
 
 
+@app.post("/api/settings/integrations/test-ml")
+async def test_ml_credentials(request: Request, db: Session = Depends(get_db)):
+    _require_admin(request, db)
+    from integrations.mercadolibre import _get_token
+    settings = _get_integration_settings_dict(db)
+    app_id = settings.get("ml_app_id")
+    secret = settings.get("ml_app_secret")
+    if not app_id or not secret:
+        raise HTTPException(400, "Credenciales de MercadoLibre no configuradas.")
+    try:
+        await _get_token(app_id, secret)
+        return {"status": "ok"}
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        raise HTTPException(502, str(e))
+
+
 def _parse_steps(raw: str | None) -> list[str]:
     if not raw:
         return []

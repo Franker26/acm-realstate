@@ -84,3 +84,4 @@ export const getBrandingSettings = () =>
 export const updateBrandingSettings = (data) => request('PUT', '/api/settings/branding', data)
 export const getIntegrationSettings = () => request('GET', '/api/settings/integrations')
 export const updateIntegrationSettings = (data) => request('PUT', '/api/settings/integrations', data)
+export const testMlCredentials = () => request('POST', '/api/settings/integrations/test-ml')
