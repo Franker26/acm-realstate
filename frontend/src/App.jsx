@@ -18,6 +18,9 @@ import Login from './pages/Login.jsx'
 import Settings from './pages/Settings.jsx'
 import Approvals from './pages/Approvals.jsx'
 import MlCallback from './pages/MlCallback.jsx'
+import AdminLogin from './pages/admin/AdminLogin.jsx'
+import AdminDashboard from './pages/admin/AdminDashboard.jsx'
+import AdminCompanyDetail from './pages/admin/AdminCompanyDetail.jsx'
 import { getBrandingSettings, getCurrentUser, loginUser } from './api.js'
 
 // --- Auth ---
@@ -306,8 +309,17 @@ function AppRoutes() {
       <Route path="/approvals" element={<PrivateRoute><Approvals /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
       <Route path="/ml-callback" element={<MlCallback />} />
+      {/* Admin panel — completely separate layout */}
+      <Route path="/admin" element={<AdminLogin />} />
+      <Route path="/admin/companies" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+      <Route path="/admin/companies/:id" element={<AdminRoute><AdminCompanyDetail /></AdminRoute>} />
     </Routes>
   )
+}
+
+function AdminRoute({ children }) {
+  const token = localStorage.getItem('acm_admin_token')
+  return token ? children : <Navigate to="/admin" replace />
 }
 
 export default function App() {

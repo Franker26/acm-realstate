@@ -361,6 +361,33 @@ class UserRead(BaseModel):
     is_admin: bool
     is_approver: bool = False
     needs_approval: bool = False
+    company_id: Optional[int] = None
+
+
+class CompanyCreate(BaseModel):
+    name: str
+
+
+class CompanyUpdate(BaseModel):
+    name: str
+
+
+class CompanyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    created_at: datetime
+    user_count: int = 0
+    acm_count: int = 0
+
+
+class AdminUserCreate(BaseModel):
+    username: str
+    password: str
+    is_admin: bool = False
+    is_approver: bool = False
+    needs_approval: bool = False
 
 
 class PonderadoresDefaults(BaseModel):
