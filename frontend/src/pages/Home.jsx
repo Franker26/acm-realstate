@@ -5,10 +5,10 @@ import { useAuth, useWizard } from '../App.jsx'
 import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
 const COLUMNS = [
-  { key: 'nuevo', title: 'Nuevo', description: 'Tasaciones recién creadas o pendientes de completar.' },
-  { key: 'en_progreso', title: 'En progreso', description: 'Trabajos con comparables o ajustes en análisis.' },
-  { key: 'finalizado', title: 'Finalizado', description: 'Tasaciones listas para exportar o compartir.' },
-  { key: 'cancelado', title: 'Cancelado', description: 'Análisis descartados o pausados.' },
+  { key: 'nuevo', title: 'Nuevo', description: 'Tasaciones recién creadas o pendientes de completar.', tone: 'blue' },
+  { key: 'en_progreso', title: 'En progreso', description: 'Trabajos con comparables o ajustes en análisis.', tone: 'violet' },
+  { key: 'finalizado', title: 'Finalizado', description: 'Tasaciones listas para exportar o compartir.', tone: 'green' },
+  { key: 'cancelado', title: 'Cancelado', description: 'Análisis descartados o pausados.', tone: 'slate' },
 ]
 
 function initials(name = '') {
@@ -62,6 +62,20 @@ function statusMeta(acm) {
   }
 }
 
+function stageProgress(acm) {
+  const order = ['nuevo', 'en_progreso', 'finalizado', 'cancelado']
+  const index = order.indexOf(acm.stage || 'nuevo')
+  if (index <= 0) return 'Paso inicial'
+  if (index === 1) return 'Carga y ajuste en curso'
+  if (index === 2) return 'Lista para exportar'
+  return 'Flujo detenido'
+}
+
+function comparablesLabel(acm) {
+  const count = acm.cantidad_comparables || 0
+  return `${count} comparable${count === 1 ? '' : 's'}`
+}
+
 export default function Home() {
   const [acms, setAcms] = useState([])
   const [loading, setLoading] = useState(true)
@@ -108,10 +122,10 @@ export default function Home() {
     const inFlight = (grouped.nuevo?.length || 0) + (grouped.en_progreso?.length || 0)
     const comparables = acms.reduce((total, acm) => total + (acm.cantidad_comparables || 0), 0)
     return [
-      { label: 'Tasaciones activas', value: inFlight, tone: 'blue' },
-      { label: 'Finalizadas', value: completed, tone: 'green' },
-      { label: 'Pendientes de aprobación', value: pendingApprovals, tone: 'amber' },
-      { label: 'Comparables cargados', value: comparables, tone: 'violet' },
+      { label: 'Tasaciones activas', value: inFlight, tone: 'blue', note: 'Casos en trabajo real' },
+      { label: 'Finalizadas', value: completed, tone: 'green', note: 'Listas para cierre o entrega' },
+      { label: 'Pendientes de aprobación', value: pendingApprovals, tone: 'amber', note: 'Esperando revisión del equipo' },
+      { label: 'Comparables cargados', value: comparables, tone: 'violet', note: 'Base de mercado acumulada' },
     ]
   }, [acms, grouped])
 
@@ -196,9 +210,19 @@ export default function Home() {
               ? 'Vista general del flujo de trabajo con todas las tasaciones del equipo, aprobación incluida.'
               : 'Seguí tus tasaciones, retomá el paso correcto y mové cada caso entre etapas con menos fricción.'}
           </p>
+          <div className="home-kanban-hero__signals">
+            <div className="home-kanban-signal">
+              <span className="home-kanban-signal__label">Vista</span>
+              <strong>{user?.is_admin ? 'Equipo completo' : 'Seguimiento personal'}</strong>
+            </div>
+            <div className="home-kanban-signal">
+              <span className="home-kanban-signal__label">Estado del panel</span>
+              <strong>{acms.length} tasaciones en workspace</strong>
+            </div>
+          </div>
         </div>
         <div className="home-kanban-hero__actions">
-          <div className="home-kanban-hero__hint">Arrastrá cards entre columnas o cambiá la etapa desde cada ficha.</div>
+          <div className="home-kanban-hero__hint">Arrastrá cards entre columnas o abrí cada caso para retomarlo desde el paso correcto.</div>
           <button className="btn btn-primary" onClick={handleNew}>+ Nueva tasación</button>
         </div>
       </div>
@@ -230,6 +254,7 @@ export default function Home() {
               <article key={item.label} className={`dashboard-metric dashboard-metric--${item.tone}`}>
                 <span className="dashboard-metric__label">{item.label}</span>
                 <strong className="dashboard-metric__value">{item.value}</strong>
+                <span className="dashboard-metric__note">{item.note}</span>
               </article>
             ))}
           </section>
@@ -241,13 +266,14 @@ export default function Home() {
               return (
                 <section
                   key={column.key}
-                  className={`kanban-column${isDragTarget ? ' kanban-column--drop-target' : ''}${isCancelled ? ' kanban-column--cancelled' : ''}`}
+                  className={`kanban-column kanban-column--${column.tone}${isDragTarget ? ' kanban-column--drop-target' : ''}${isCancelled ? ' kanban-column--cancelled' : ''}`}
                   onDragOver={(e) => handleDragOver(e, column.key)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, column.key)}
                 >
                   <div className="kanban-column__header">
                     <div>
+                      <span className="kanban-column__eyebrow">Etapa</span>
                       <h2>{column.title}</h2>
                       <p>{column.description}</p>
                     </div>
@@ -330,9 +356,14 @@ export default function Home() {
                             <span>Act. {new Date(acm.updated_at || acm.fecha_creacion).toLocaleDateString('es-AR')}</span>
                           </div>
 
+                          <div className="kanban-card__insights">
+                            <span className="kanban-card__chip">{comparablesLabel(acm)}</span>
+                            <span className="kanban-card__chip">{stageProgress(acm)}</span>
+                          </div>
+
                           <div className="kanban-card__footer">
                             <div className="kanban-card__footer-note">
-                              Arrastrá para mover de etapa.
+                              Abrí la ficha o arrastrá para mover de etapa.
                             </div>
                           </div>
                         </article>
