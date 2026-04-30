@@ -350,7 +350,7 @@ _INTEGRATION_KEYS = ["scraper_service_url", "scraper_service_token", "ml_app_id"
 _ML_TOKEN_KEYS = ["ml_access_token", "ml_refresh_token", "ml_token_expires_at", "ml_user_nickname"]
 _ML_REDIRECT_URI = os.getenv(
     "ML_REDIRECT_URI",
-    "https://reval-app.vercel.app/ml-callback",
+    "https://app.reval.com.ar/ml-callback",
 )
 
 
