@@ -968,25 +968,19 @@ class ZonapropExtractRequest(PydanticBase):
 
 _ZONAPROP_RETRY_DELAYS = [1, 3]  # seconds between attempts (3 total attempts)
 _ZONAPROP_RETRYABLE_STATUSES = {403, 429, 503, 502}
-_SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY")  # ScraperAPI key for production (cloud IPs get blocked by Zonaprop)
+# When set, extraction is delegated to the local scraper microservice (residential IP).
+_SCRAPER_SERVICE_URL = os.getenv("SCRAPER_SERVICE_URL")
+_SCRAPER_SERVICE_TOKEN = os.getenv("SCRAPER_SERVICE_TOKEN", "")
 
 
 async def _fetch_zonaprop(url: str) -> str:
-    # In production (cloud IPs blocked by Zonaprop), route through ScraperAPI if key is configured.
-    if _SCRAPER_API_KEY:
-        fetch_url = f"http://api.scraperapi.com?api_key={_SCRAPER_API_KEY}&url={url}"
-        req_headers: dict = {}
-        req_kwargs: dict = {"follow_redirects": True, "timeout": 30}
-    else:
-        fetch_url = url
-        req_headers = _BROWSER_HEADERS
-        req_kwargs = {"follow_redirects": True, "timeout": 10}
-
     last_exc: Exception | None = None
     for attempt in range(len(_ZONAPROP_RETRY_DELAYS) + 1):
         try:
-            async with httpx.AsyncClient(headers=req_headers, **req_kwargs) as client:
-                r = await client.get(fetch_url)
+            async with httpx.AsyncClient(
+                headers=_BROWSER_HEADERS, follow_redirects=True, timeout=10
+            ) as client:
+                r = await client.get(url)
             if r.status_code in _ZONAPROP_RETRYABLE_STATUSES:
                 raise httpx.HTTPStatusError(
                     f"status {r.status_code}", request=r.request, response=r
@@ -1012,6 +1006,20 @@ async def extract_zonaprop(body: ZonapropExtractRequest):
     url = body.url.strip()
     if "zonaprop.com.ar" not in url:
         raise HTTPException(400, "La URL debe ser de zonaprop.com.ar")
+
+    # Delegate to local scraper microservice if configured (bypasses cloud IP blocking)
+    if _SCRAPER_SERVICE_URL:
+        try:
+            headers = {"Authorization": f"Bearer {_SCRAPER_SERVICE_TOKEN}"} if _SCRAPER_SERVICE_TOKEN else {}
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(f"{_SCRAPER_SERVICE_URL}/extract", json={"url": url}, headers=headers)
+            if r.status_code == 200:
+                return r.json()
+            raise HTTPException(r.status_code, r.text)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(502, f"Scraper service unavailable: {e}")
 
     try:
         html = await _fetch_zonaprop(url)
