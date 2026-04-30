@@ -4,10 +4,10 @@ import { deleteACM, listACMs, updateACM } from '../api.js'
 import { useAuth, useWizard } from '../App.jsx'
 
 const COLUMNS = [
-  { key: 'Borrador',     title: 'Borrador' },
-  { key: 'En progreso',  title: 'En progreso' },
-  { key: 'Finalizado',   title: 'Finalizado' },
-  { key: 'Cancelado',    title: 'Cancelado' },
+  { key: 'nuevo',        title: 'Nuevo' },
+  { key: 'en_progreso',  title: 'En progreso' },
+  { key: 'finalizado',   title: 'Finalizado' },
+  { key: 'cancelado',    title: 'Cancelado' },
 ]
 
 function initials(name = '') {
@@ -47,7 +47,7 @@ export default function Home() {
   const grouped = useMemo(() => {
     const base = Object.fromEntries(COLUMNS.map((column) => [column.key, []]))
     for (const acm of acms) {
-      const key = acm.stage || 'Borrador'
+      const key = acm.stage || 'nuevo'
       if (!base[key]) base[key] = []
       base[key].push(acm)
     }
@@ -195,7 +195,7 @@ export default function Home() {
 
                         <div className="kanban-card__footer">
                           <select
-                            value={acm.stage || 'Borrador'}
+                            value={acm.stage || 'nuevo'}
                             onChange={(e) => handleStageChange(acm, e.target.value)}
                             disabled={updatingId === acm.id}
                           >
