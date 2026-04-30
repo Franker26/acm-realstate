@@ -483,6 +483,24 @@ def ml_disconnect(request: Request, db: Session = Depends(get_db)):
     return {"status": "disconnected"}
 
 
+_SENSITIVE_SETTING_KEYS = {
+    "ml_app_secret", "ml_access_token", "ml_refresh_token", "scraper_service_token"
+}
+
+
+@app.get("/api/settings/params")
+def get_system_params(request: Request, db: Session = Depends(get_db)):
+    _require_admin(request, db)
+    settings = db.query(AppSetting).order_by(AppSetting.key).all()
+    return [
+        {
+            "key": s.key,
+            "value": "***" if s.key in _SENSITIVE_SETTING_KEYS and s.value else (s.value or ""),
+        }
+        for s in settings
+    ]
+
+
 def _parse_steps(raw: str | None) -> list[str]:
     if not raw:
         return []

@@ -87,3 +87,4 @@ export const updateIntegrationSettings = (data) => request('PUT', '/api/settings
 export const getMlAuthUrl = () => request('GET', '/api/settings/integrations/ml-auth-url')
 export const exchangeMlCode = (code) => request('POST', '/api/settings/integrations/ml-exchange', { code })
 export const disconnectMl = () => request('DELETE', '/api/settings/integrations/ml-disconnect')
+export const getSystemParams = () => request('GET', '/api/settings/params')
