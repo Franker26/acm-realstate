@@ -234,22 +234,22 @@ function ComparableCard({ comp, acm, factors, recommendations, advancedMode, onC
   const style = totalBadgeStyle(total)
 
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+    <div className="card comparable-adjustment-card">
+      <div className="comparable-adjustment-card__header">
         <div>
-          <div style={{ fontWeight: 700, color: '#1a3a5c', fontSize: 15 }}>
+          <div className="comparable-adjustment-card__title">
             {comp.direccion || comp.url?.slice(0, 50) || `Comparable #${comp.id}`}
           </div>
-          <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+          <div className="comparable-adjustment-card__meta">
             {comp.superficie_cubierta} m² · USD {comp.precio.toLocaleString('es-AR')} ·{' '}
             <strong>USD {Math.round(precioM2).toLocaleString('es-AR')}/m² pub.</strong>
           </div>
         </div>
-        <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 16 }}>
-          <div style={{ ...style, borderRadius: 6, padding: '4px 10px', fontSize: 13, marginBottom: 3 }}>
+        <div className="comparable-adjustment-card__totals">
+          <div className="comparable-adjustment-card__badge" style={style}>
             ×{total.toFixed(3)}
           </div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#1a3a5c' }}>
+          <div className="comparable-adjustment-card__value">
             USD {Math.round(ajustado).toLocaleString('es-AR')}/m²
           </div>
         </div>
@@ -350,9 +350,9 @@ export default function AplicarPonderadores() {
         <h1>Ponderadores de ajuste</h1>
         <p>
           Cada barra ajusta el precio de la comparable para equipararla a la sujeto.
-          Centro = sin ajuste. <span style={{ color: '#e65100', fontWeight: 600 }}>Naranja</span> = comparable vale
-          menos (se sube su precio). <span style={{ color: '#1565c0', fontWeight: 600 }}>Azul</span> = vale más (se baja).
-          La <span style={{ fontWeight: 600 }}>aguja azul</span> indica el valor recomendado por el sistema.
+          Centro = sin ajuste. <span className="ponderadores-accent ponderadores-accent--warm">Naranja</span> = comparable vale
+          menos (se sube su precio). <span className="ponderadores-accent ponderadores-accent--cool">Azul</span> = vale más (se baja).
+          La <span className="ponderadores-accent">aguja azul</span> indica el valor recomendado por el sistema.
         </p>
       </div>
 
@@ -391,7 +391,7 @@ export default function AplicarPonderadores() {
       </div>
 
       {advancedMode && (
-        <div className="alert alert-info" style={{ marginBottom: 12, fontSize: 12 }}>
+        <div className="alert alert-info alert-info--compact">
           Factores adicionales habilitados: cochera, pileta, luminosidad, vistas y amenities.
         </div>
       )}

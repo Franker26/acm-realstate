@@ -175,6 +175,7 @@ function AppHeader() {
   const navigate = useNavigate()
   const [logo, setLogo] = useState(() => getSavedLogo())
   const [appName, setAppName] = useState(() => getSavedAppName())
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     function onStorage(e) {
@@ -194,6 +195,10 @@ function AppHeader() {
     window.addEventListener('acm_theme_changed', onThemeChange)
     return () => window.removeEventListener('acm_theme_changed', onThemeChange)
   }, [])
+
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [location.pathname])
 
   function handleLogout() {
     logout()
@@ -228,7 +233,20 @@ function AppHeader() {
         </div>
 
         {user && (
-          <div className="app-header__right">
+          <>
+            <button
+              type="button"
+              className={`header-menu-toggle${mobileMenuOpen ? ' is-open' : ''}`}
+              aria-label="Abrir navegación"
+              aria-expanded={mobileMenuOpen}
+              onClick={() => setMobileMenuOpen((current) => !current)}
+            >
+              <span />
+              <span />
+              <span />
+            </button>
+
+            <div className={`app-header__right${mobileMenuOpen ? ' is-open' : ''}`}>
             <nav className="header-nav" aria-label="Principal">
               {navItems.map((item) => {
                 const isActive = item.to === '/'
@@ -264,7 +282,8 @@ function AppHeader() {
             >
               Salir
             </button>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </header>

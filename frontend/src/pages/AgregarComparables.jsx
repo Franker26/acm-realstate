@@ -230,14 +230,14 @@ export default function AgregarComparables() {
                   return (
                     <tr key={c.id}>
                       <td>{i + 1}</td>
-                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <td className="workspace-table__cell-ellipsis">
                         {c.direccion || c.url || '—'}
                       </td>
                       <td>USD {c.precio.toLocaleString('es-AR')}</td>
                       <td>{h.toFixed(1)} m²</td>
                       <td>USD {Math.round(pm2).toLocaleString('es-AR')}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: 6 }}>
+                        <div className="table-actions">
                           <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(c)}>Editar</button>
                           <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.id)}>×</button>
                         </div>
@@ -304,7 +304,7 @@ export default function AgregarComparables() {
               <div className="form-group full">
                 <label>Oportunidad de mercado</label>
                 <div className="checkbox-row">
-                  <label style={{ whiteSpace: 'nowrap' }}>
+                  <label className="checkbox-row__label">
                     <input type="checkbox" tabIndex={5} checked={form.oportunidad_mercado}
                       onChange={(e) => handleChange('oportunidad_mercado', e.target.checked)} />
                     Precio competitivo (aplica ×0.95)
