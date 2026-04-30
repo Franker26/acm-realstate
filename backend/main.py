@@ -737,11 +737,132 @@ _BROWSER_HEADERS = {
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "es-AR,es;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    # Accept-Encoding intentionally omitted: httpx adds it and decompresses transparently.
+    # Setting it manually bypasses httpx's auto-decompression and returns raw compressed bytes.
 }
 
 
+_TIPO_MAP = {
+    "departamento": "Departamento",
+    "casa": "Casa",
+    "ph": "PH",
+    "local": "Local",
+    "local comercial": "Local",
+}
+
+
+def _parse_zonaprop_html(html: str) -> dict:
+    """Parse Zonaprop SSR pages (no __NEXT_DATA__). Uses JSON-LD + inline dataLayerInfo."""
+    soup = BeautifulSoup(html, "html.parser")
+    result: dict = {}
+
+    # --- 1. JSON-LD: address, surface, rooms, type, publication date ---
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            d = json.loads(script.string or "")
+        except Exception:
+            continue
+        schema_type = d.get("@type", "")
+        if schema_type not in ("Apartment", "House", "SingleFamilyResidence", "RealEstateListing"):
+            continue
+
+        # Address
+        addr = d.get("address", {})
+        street = addr.get("streetAddress", "").strip()
+        region = addr.get("addressRegion", "").strip()
+        if street:
+            result["direccion"] = f"{street}, {region}".strip(", ") if region else street
+
+        # Surface (floorSize = total covered)
+        floor_size = d.get("floorSize", {})
+        if isinstance(floor_size, dict) and floor_size.get("value"):
+            result["superficie_cubierta"] = float(floor_size["value"])
+
+        # Property type
+        raw_type = schema_type.lower()
+        if raw_type in ("house", "singlefamilyresidence"):
+            result["tipo"] = "Casa"
+        elif raw_type == "apartment":
+            result["tipo"] = "Departamento"
+
+        # Publication date → days on market
+        for key in ("datePosted", "datePublished", "uploadDate"):
+            pub_str = d.get(key)
+            if isinstance(pub_str, str):
+                try:
+                    pub = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                    result["dias_mercado"] = max(0, (datetime.now(timezone.utc) - pub).days)
+                except Exception:
+                    pass
+                break
+
+        break  # only use first matching schema
+
+    # --- 2. dataLayerInfo inline JS: price, property type, city ---
+    for script in soup.find_all("script"):
+        src = script.string or ""
+        if "dataLayerInfo" not in src:
+            continue
+        m = re.search(r"dataLayerInfo\s*=\s*\{([^}]+)\}", src, re.DOTALL)
+        if not m:
+            continue
+        # Parse JS object (single-quoted keys/values) into dict
+        pairs = re.findall(r"'([^']+)'\s*:\s*'([^']*)'", m.group(1))
+        info = {k.strip(): v.strip() for k, v in pairs}
+
+        # Price from sellPrice: "USD 148600"
+        sell = info.get("sellPrice", "")
+        if "USD" in sell.upper():
+            nums = re.findall(r"\d+", sell.replace(".", "").replace(",", ""))
+            for n in nums:
+                v = int(n)
+                if 1_000 < v < 100_000_000:
+                    result["precio"] = v
+                    break
+
+        # Property type override (more reliable than JSON-LD @type)
+        raw_tipo = info.get("propertyType", "").lower().strip()
+        if raw_tipo in _TIPO_MAP:
+            result["tipo"] = _TIPO_MAP[raw_tipo]
+
+        # City as fallback address
+        city = info.get("city", "").strip()
+        if city and "direccion" not in result:
+            result["direccion"] = city
+
+        break
+
+    # --- 3. Fallback price from visible span (e.g. "USD 148.600") ---
+    if "precio" not in result:
+        for span in soup.find_all("span"):
+            t = span.get_text(" ", strip=True)
+            if re.match(r"USD\s*[\d.,]+", t, re.I):
+                nums = re.findall(r"\d+", t.replace(".", "").replace(",", ""))
+                for n in nums:
+                    v = int(n)
+                    if 1_000 < v < 100_000_000:
+                        result["precio"] = v
+                        break
+                if "precio" in result:
+                    break
+
+    # --- 4. Feature icons: surface if not in JSON-LD ---
+    if "superficie_cubierta" not in result:
+        features_section = soup.find(class_=re.compile(r"section-main-features|section-icon-features"))
+        if features_section:
+            text = features_section.get_text(" ", strip=True)
+            m2_cub = re.search(r"(\d+(?:[.,]\d+)?)\s*m²?\s*cub", text, re.I)
+            m2_tot = re.search(r"(\d+(?:[.,]\d+)?)\s*m²?\s*tot", text, re.I)
+            if m2_cub:
+                result["superficie_cubierta"] = float(m2_cub.group(1).replace(",", "."))
+            elif m2_tot:
+                result["superficie_cubierta"] = float(m2_tot.group(1).replace(",", "."))
+
+    return result
+
+
 def _parse_next_data(html: str) -> dict:
+    """Parse Zonaprop pages that use Next.js __NEXT_DATA__ (newer listing format)."""
     m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.+?)</script>', html, re.DOTALL)
     if not m:
         return {}
@@ -752,7 +873,6 @@ def _parse_next_data(html: str) -> dict:
 
     page_props = data.get("props", {}).get("pageProps", {})
 
-    # Zonaprop wraps the listing under different keys depending on listing type
     listing = None
     for key in ("listing", "listingData", "posting", "propertyData"):
         c = page_props.get(key)
@@ -760,7 +880,6 @@ def _parse_next_data(html: str) -> dict:
             listing = c
             break
     if listing is None:
-        # Some pages nest it under initialData
         initial = page_props.get("initialData", {})
         for key in ("posting", "listing"):
             c = initial.get(key) if isinstance(initial, dict) else None
@@ -772,7 +891,6 @@ def _parse_next_data(html: str) -> dict:
 
     result = {}
 
-    # Price (USD only)
     price_obj = listing.get("price") or {}
     if isinstance(price_obj, dict):
         amount = price_obj.get("amount") or price_obj.get("value")
@@ -784,7 +902,6 @@ def _parse_next_data(html: str) -> dict:
                 result["precio"] = int(float(p.get("amount", 0)))
                 break
 
-    # Address
     for getter in [
         lambda l: l.get("address"),
         lambda l: (l.get("location") or {}).get("address", {}).get("name"),
@@ -799,7 +916,6 @@ def _parse_next_data(html: str) -> dict:
         except Exception:
             pass
 
-    # Days on market (from publication date)
     for key in ("createdOn", "publishDate", "publicationDate", "createdAt", "listingDate"):
         pub_str = listing.get(key)
         if isinstance(pub_str, str):
@@ -809,35 +925,6 @@ def _parse_next_data(html: str) -> dict:
                 break
             except Exception:
                 pass
-
-    return result
-
-
-def _parse_html_fallback(html: str) -> dict:
-    soup = BeautifulSoup(html, "html.parser")
-    result = {}
-
-    for qa in ("price", "PRICE", "posting-price", "POSTING_PRICE"):
-        el = soup.find(attrs={"data-qa": qa})
-        if el:
-            text_content = el.get_text(" ", strip=True)
-            # Extract numbers, remove thousands separators
-            nums = re.findall(r"[\d]+", text_content.replace(".", "").replace(",", ""))
-            for n in nums:
-                v = int(n)
-                if 1_000 < v < 100_000_000:
-                    result["precio"] = v
-                    break
-            if "precio" in result:
-                break
-
-    for qa in ("address", "location", "POSTING_LOCATION", "LOCATION", "posting-title"):
-        el = soup.find(attrs={"data-qa": qa})
-        if el:
-            t = el.get_text(" ", strip=True)
-            if t:
-                result["direccion"] = t
-                break
 
     return result
 
@@ -891,9 +978,10 @@ async def extract_zonaprop(body: ZonapropExtractRequest):
     except Exception as e:
         raise HTTPException(422, f"No se pudo acceder a la URL: {e}")
 
+    # Try __NEXT_DATA__ first (newer listing pages), fall back to SSR HTML parser
     result = _parse_next_data(html)
     if not result:
-        result = _parse_html_fallback(html)
+        result = _parse_zonaprop_html(html)
 
     if not result:
         raise HTTPException(
