@@ -1,9 +1,24 @@
+import asyncio
 import json
+import logging
 import os
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+logger = logging.getLogger("acm")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+
+STEP_ORDER = ["sujeto", "comparables", "ponderadores", "resultados", "exportar"]
+STAGE_ORDER = ["nuevo", "en_progreso", "finalizado", "cancelado"]
+
+_STAGE_MIGRATION = {
+    "Borrador": "nuevo",
+    "En progreso": "en_progreso",
+    "Finalizado": "finalizado",
+    "Cancelado": "cancelado",
+}
 
 import httpx
 from bs4 import BeautifulSoup
@@ -13,6 +28,7 @@ from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 import bcrypt as _bcrypt_lib
 from pydantic import BaseModel as PydanticBase
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -91,6 +107,8 @@ from schemas import (
     ComparableUpdate,
     PonderadoresDefaults,
     ResultadoResponse,
+    StageUpdateRequest,
+    StepUpdateRequest,
     UserCreate,
     UserRead,
     UserUpdate,
@@ -100,11 +118,32 @@ from schemas import (
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
+        # Postgres: convert stage column from native enum to varchar
+        for stmt in (
+            "ALTER TABLE acm ALTER COLUMN stage TYPE VARCHAR USING stage::text",
+            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS current_step VARCHAR DEFAULT 'sujeto'",
+            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS steps_completed VARCHAR DEFAULT '[]'",
+            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
+        ):
+            try:
+                db.execute(text(stmt))
+                db.commit()
+            except Exception:
+                db.rollback()
+
         for acm in db.query(ACM).all():
             if acm.updated_at is None:
                 acm.updated_at = acm.fecha_creacion
             if acm.approval_status is None:
                 _mark_acm_pending_if_required(acm)
+            # Migrate legacy stage values
+            if acm.stage in _STAGE_MIGRATION:
+                acm.stage = _STAGE_MIGRATION[acm.stage]
+            # Set defaults for new step fields
+            if not acm.current_step:
+                acm.current_step = "sujeto"
+            if not acm.steps_completed:
+                acm.steps_completed = "[]"
         db.commit()
     yield
 
@@ -298,8 +337,17 @@ def update_branding_settings(
     return _get_branding_settings(db)
 
 
+def _parse_steps(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        return json.loads(raw)
+    except Exception:
+        return []
+
+
 def _get_acm_or_404(acm_id: int, db: Session) -> ACM:
-    acm = db.query(ACM).filter(ACM.id == acm_id).first()
+    acm = db.query(ACM).filter(ACM.id == acm_id, ACM.deleted_at.is_(None)).first()
     if not acm:
         raise HTTPException(status_code=404, detail=f"ACM {acm_id} no encontrado")
     return acm
@@ -326,9 +374,9 @@ def _serialize_approval_comment(comment: ApprovalComment) -> ApprovalCommentRead
 
 def _mark_acm_pending_if_required(acm: ACM):
     if _requires_approval(acm):
-        acm.approval_status = ApprovalStatus.pendiente
-        acm.approved_by_id = None
-        acm.approved_at = None
+        # Only transition to pending if not already in an active approval state
+        if acm.approval_status == ApprovalStatus.no_requerida:
+            acm.approval_status = ApprovalStatus.pendiente
     else:
         acm.approval_status = ApprovalStatus.no_requerida
         acm.approved_by_id = None
@@ -437,10 +485,16 @@ def create_acm(body: ACMCreate, request: Request, db: Session = Depends(get_db))
     return _build_acm_read(acm)
 
 
+@app.get("/api/acm/stages")
+def get_stages():
+    """Ordered stage list — single source of truth for frontend."""
+    return {"stages": STAGE_ORDER}
+
+
 @app.get("/api/acm", response_model=list[ACMSummary])
 def list_acms(request: Request, db: Session = Depends(get_db)):
     current = _current_user(request, db)
-    query = db.query(ACM).order_by(ACM.fecha_creacion.desc())
+    query = db.query(ACM).filter(ACM.deleted_at.is_(None)).order_by(ACM.fecha_creacion.desc())
     if not current.is_admin:
         query = query.filter(ACM.owner_id == current.id)
     result = []
@@ -480,8 +534,42 @@ def delete_acm(acm_id: int, request: Request, db: Session = Depends(get_db)):
     current = _current_user(request, db)
     acm = _get_acm_or_404(acm_id, db)
     _check_acm_access(acm, current)
-    db.delete(acm)
+    acm.deleted_at = datetime.utcnow()
     db.commit()
+    logger.info("soft_delete acm=%d by=%s", acm_id, current.username)
+
+
+@app.patch("/api/acm/{acm_id}/stage", response_model=ACMRead)
+def update_stage(acm_id: int, body: StageUpdateRequest, request: Request, db: Session = Depends(get_db)):
+    if body.stage not in STAGE_ORDER:
+        raise HTTPException(400, f"Etapa inválida: '{body.stage}'. Válidas: {STAGE_ORDER}")
+    acm = _get_acm_checked(acm_id, request, db)
+    old_stage = acm.stage
+    acm.stage = body.stage
+    _mark_acm_pending_if_required(acm)
+    db.commit()
+    db.refresh(acm)
+    logger.info("stage_change acm=%d %s→%s", acm_id, old_stage, body.stage)
+    return _build_acm_read(acm)
+
+
+@app.patch("/api/acm/{acm_id}/step", response_model=ACMRead)
+def update_step(acm_id: int, body: StepUpdateRequest, request: Request, db: Session = Depends(get_db)):
+    if body.step not in STEP_ORDER:
+        raise HTTPException(400, f"Step inválido: '{body.step}'. Válidos: {STEP_ORDER}")
+    acm = _get_acm_checked(acm_id, request, db)
+    steps = _parse_steps(acm.steps_completed)
+    if body.completed:
+        if body.step not in steps:
+            steps.append(body.step)
+    else:
+        steps = [s for s in steps if s != body.step]
+    acm.steps_completed = json.dumps(steps)
+    acm.current_step = body.step
+    db.commit()
+    db.refresh(acm)
+    logger.info("step_update acm=%d step=%s completed=%s", acm_id, body.step, body.completed)
+    return _build_acm_read(acm)
 
 
 def _build_acm_read(acm: ACM) -> ACMRead:
@@ -649,11 +737,165 @@ _BROWSER_HEADERS = {
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "es-AR,es;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    # Accept-Encoding intentionally omitted: httpx adds it and decompresses transparently.
+    # Setting it manually bypasses httpx's auto-decompression and returns raw compressed bytes.
 }
 
 
+_TIPO_MAP = {
+    "departamento": "Departamento",
+    "casa": "Casa",
+    "ph": "PH",
+    "local": "Local",
+    "local comercial": "Local",
+}
+
+
+def _parse_zonaprop_html(html: str) -> dict:
+    """Parse Zonaprop SSR pages (no __NEXT_DATA__). Uses JSON-LD + inline dataLayerInfo."""
+    soup = BeautifulSoup(html, "html.parser")
+    result: dict = {}
+
+    # --- 1. JSON-LD: address, surface, rooms, type, publication date ---
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            d = json.loads(script.string or "")
+        except Exception:
+            continue
+        schema_type = d.get("@type", "")
+        if schema_type not in ("Apartment", "House", "SingleFamilyResidence", "RealEstateListing"):
+            continue
+
+        # Address
+        addr = d.get("address", {})
+        street = addr.get("streetAddress", "").strip()
+        region = addr.get("addressRegion", "").strip()
+        if street:
+            result["direccion"] = f"{street}, {region}".strip(", ") if region else street
+
+        # Surface (floorSize = total covered)
+        floor_size = d.get("floorSize", {})
+        if isinstance(floor_size, dict) and floor_size.get("value"):
+            result["superficie_cubierta"] = float(floor_size["value"])
+
+        # Property type
+        raw_type = schema_type.lower()
+        if raw_type in ("house", "singlefamilyresidence"):
+            result["tipo"] = "Casa"
+        elif raw_type == "apartment":
+            result["tipo"] = "Departamento"
+
+        # Publication date → days on market
+        for key in ("datePosted", "datePublished", "uploadDate"):
+            pub_str = d.get(key)
+            if isinstance(pub_str, str):
+                try:
+                    pub = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                    result["dias_mercado"] = max(0, (datetime.now(timezone.utc) - pub).days)
+                except Exception:
+                    pass
+                break
+
+        break  # only use first matching schema
+
+    # --- 2. dataLayerInfo inline JS: price, property type, city ---
+    for script in soup.find_all("script"):
+        src = script.string or ""
+        if "dataLayerInfo" not in src:
+            continue
+        m = re.search(r"dataLayerInfo\s*=\s*\{([^}]+)\}", src, re.DOTALL)
+        if not m:
+            continue
+        # Parse JS object (single-quoted keys/values) into dict
+        pairs = re.findall(r"'([^']+)'\s*:\s*'([^']*)'", m.group(1))
+        info = {k.strip(): v.strip() for k, v in pairs}
+
+        # Price from sellPrice: "USD 148600"
+        sell = info.get("sellPrice", "")
+        if "USD" in sell.upper():
+            nums = re.findall(r"\d+", sell.replace(".", "").replace(",", ""))
+            for n in nums:
+                v = int(n)
+                if 1_000 < v < 100_000_000:
+                    result["precio"] = v
+                    break
+
+        # Property type override (more reliable than JSON-LD @type)
+        raw_tipo = info.get("propertyType", "").lower().strip()
+        if raw_tipo in _TIPO_MAP:
+            result["tipo"] = _TIPO_MAP[raw_tipo]
+
+        # City as fallback address
+        city = info.get("city", "").strip()
+        if city and "direccion" not in result:
+            result["direccion"] = city
+
+        break
+
+    # --- 3. Fallback price from visible span (e.g. "USD 148.600") ---
+    if "precio" not in result:
+        for span in soup.find_all("span"):
+            t = span.get_text(" ", strip=True)
+            if re.match(r"USD\s*[\d.,]+", t, re.I):
+                nums = re.findall(r"\d+", t.replace(".", "").replace(",", ""))
+                for n in nums:
+                    v = int(n)
+                    if 1_000 < v < 100_000_000:
+                        result["precio"] = v
+                        break
+                if "precio" in result:
+                    break
+
+    # --- 4. Feature icons: surface if not in JSON-LD ---
+    if "superficie_cubierta" not in result:
+        features_section = soup.find(class_=re.compile(r"section-main-features|section-icon-features"))
+        if features_section:
+            text = features_section.get_text(" ", strip=True)
+            m2_cub = re.search(r"(\d+(?:[.,]\d+)?)\s*m²?\s*cub", text, re.I)
+            m2_tot = re.search(r"(\d+(?:[.,]\d+)?)\s*m²?\s*tot", text, re.I)
+            if m2_cub:
+                result["superficie_cubierta"] = float(m2_cub.group(1).replace(",", "."))
+            elif m2_tot:
+                result["superficie_cubierta"] = float(m2_tot.group(1).replace(",", "."))
+
+    # --- 5. Days on market from "Publicado hace N días/meses" text ---
+    if "dias_mercado" not in result:
+        antiquity_el = soup.find(string=re.compile(r"Publicado hace", re.I))
+        if antiquity_el:
+            m = re.search(r"hace\s+(\d+)\s+(día|mes|año)", antiquity_el, re.I)
+            if m:
+                n, unit = int(m.group(1)), m.group(2).lower()
+                if unit.startswith("día"):
+                    result["dias_mercado"] = n
+                elif unit.startswith("mes"):
+                    result["dias_mercado"] = n * 30
+                elif unit.startswith("año"):
+                    result["dias_mercado"] = n * 365
+
+    # --- 6. Orientation from icon-orientacion ---
+    _ORI_MAP = {"n": "Norte", "s": "Sur", "e": "Este", "o": "Oeste", "i": "Interno",
+                "norte": "Norte", "sur": "Sur", "este": "Este", "oeste": "Oeste", "interno": "Interno"}
+    ori_icon = soup.find("i", class_="icon-orientacion")
+    if ori_icon:
+        li = ori_icon.find_parent("li")
+        raw = li.get_text(strip=True).lower() if li else ""
+        if raw in _ORI_MAP:
+            result["orientacion"] = _ORI_MAP[raw]
+
+    # --- 7. Antigüedad from icon-antiguedad ---
+    ant_icon = soup.find("i", class_="icon-antiguedad")
+    if ant_icon:
+        li = ant_icon.find_parent("li")
+        raw = li.get_text(strip=True) if li else ""
+        m = re.search(r"(\d+)", raw)
+        if m:
+            result["antiguedad"] = int(m.group(1))
+
+    return result
+
+
 def _parse_next_data(html: str) -> dict:
+    """Parse Zonaprop pages that use Next.js __NEXT_DATA__ (newer listing format)."""
     m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.+?)</script>', html, re.DOTALL)
     if not m:
         return {}
@@ -664,7 +906,6 @@ def _parse_next_data(html: str) -> dict:
 
     page_props = data.get("props", {}).get("pageProps", {})
 
-    # Zonaprop wraps the listing under different keys depending on listing type
     listing = None
     for key in ("listing", "listingData", "posting", "propertyData"):
         c = page_props.get(key)
@@ -672,7 +913,6 @@ def _parse_next_data(html: str) -> dict:
             listing = c
             break
     if listing is None:
-        # Some pages nest it under initialData
         initial = page_props.get("initialData", {})
         for key in ("posting", "listing"):
             c = initial.get(key) if isinstance(initial, dict) else None
@@ -684,7 +924,6 @@ def _parse_next_data(html: str) -> dict:
 
     result = {}
 
-    # Price (USD only)
     price_obj = listing.get("price") or {}
     if isinstance(price_obj, dict):
         amount = price_obj.get("amount") or price_obj.get("value")
@@ -696,7 +935,6 @@ def _parse_next_data(html: str) -> dict:
                 result["precio"] = int(float(p.get("amount", 0)))
                 break
 
-    # Address
     for getter in [
         lambda l: l.get("address"),
         lambda l: (l.get("location") or {}).get("address", {}).get("name"),
@@ -711,7 +949,6 @@ def _parse_next_data(html: str) -> dict:
         except Exception:
             pass
 
-    # Days on market (from publication date)
     for key in ("createdOn", "publishDate", "publicationDate", "createdAt", "listingDate"):
         pub_str = listing.get(key)
         if isinstance(pub_str, str):
@@ -725,37 +962,40 @@ def _parse_next_data(html: str) -> dict:
     return result
 
 
-def _parse_html_fallback(html: str) -> dict:
-    soup = BeautifulSoup(html, "html.parser")
-    result = {}
-
-    for qa in ("price", "PRICE", "posting-price", "POSTING_PRICE"):
-        el = soup.find(attrs={"data-qa": qa})
-        if el:
-            text_content = el.get_text(" ", strip=True)
-            # Extract numbers, remove thousands separators
-            nums = re.findall(r"[\d]+", text_content.replace(".", "").replace(",", ""))
-            for n in nums:
-                v = int(n)
-                if 1_000 < v < 100_000_000:
-                    result["precio"] = v
-                    break
-            if "precio" in result:
-                break
-
-    for qa in ("address", "location", "POSTING_LOCATION", "LOCATION", "posting-title"):
-        el = soup.find(attrs={"data-qa": qa})
-        if el:
-            t = el.get_text(" ", strip=True)
-            if t:
-                result["direccion"] = t
-                break
-
-    return result
-
-
 class ZonapropExtractRequest(PydanticBase):
     url: str
+
+
+_ZONAPROP_RETRY_DELAYS = [1, 3]  # seconds between attempts (3 total attempts)
+_ZONAPROP_RETRYABLE_STATUSES = {403, 429, 503, 502}
+
+
+async def _fetch_zonaprop(url: str) -> str:
+    last_exc: Exception | None = None
+    for attempt in range(len(_ZONAPROP_RETRY_DELAYS) + 1):
+        try:
+            async with httpx.AsyncClient(
+                headers=_BROWSER_HEADERS, follow_redirects=True, timeout=10
+            ) as client:
+                r = await client.get(url)
+            if r.status_code in _ZONAPROP_RETRYABLE_STATUSES:
+                raise httpx.HTTPStatusError(
+                    f"status {r.status_code}", request=r.request, response=r
+                )
+            r.raise_for_status()
+            return r.text
+        except httpx.HTTPStatusError as e:
+            last_exc = e
+        except Exception as e:
+            last_exc = e
+        if attempt < len(_ZONAPROP_RETRY_DELAYS):
+            await asyncio.sleep(_ZONAPROP_RETRY_DELAYS[attempt])
+    raise HTTPException(
+        422,
+        "No pudimos acceder automáticamente a los datos en este momento. "
+        "Esto puede deberse a restricciones temporales del sitio. "
+        "Podés intentar nuevamente o completar los datos manualmente.",
+    )
 
 
 @app.post("/api/zonaprop/extract")
@@ -765,20 +1005,16 @@ async def extract_zonaprop(body: ZonapropExtractRequest):
         raise HTTPException(400, "La URL debe ser de zonaprop.com.ar")
 
     try:
-        async with httpx.AsyncClient(headers=_BROWSER_HEADERS, follow_redirects=True, timeout=20) as client:
-            r = await client.get(url)
-        if r.status_code == 403:
-            raise HTTPException(422, "Zonaprop bloqueó el acceso. Intentá de nuevo en unos segundos o ingresá los datos manualmente.")
-        r.raise_for_status()
-        html = r.text
+        html = await _fetch_zonaprop(url)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(422, f"No se pudo acceder a la URL: {e}")
 
+    # Try __NEXT_DATA__ first (newer listing pages), fall back to SSR HTML parser
     result = _parse_next_data(html)
     if not result:
-        result = _parse_html_fallback(html)
+        result = _parse_zonaprop_html(html)
 
     if not result:
         raise HTTPException(

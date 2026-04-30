@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -12,6 +13,30 @@ from models import (
     StageACM,
     TipoPropiedad,
 )
+
+# Normalize old Title-Case stage values that may still be in the DB
+_STAGE_LEGACY = {
+    "Borrador": "nuevo",
+    "En progreso": "en_progreso",
+    "Finalizado": "finalizado",
+    "Cancelado": "cancelado",
+}
+
+def _coerce_stage(v) -> str:
+    if v is None:
+        return "nuevo"
+    s = str(v)
+    return _STAGE_LEGACY.get(s, s)
+
+def _coerce_steps(v) -> list[str]:
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        try:
+            return json.loads(v)
+        except Exception:
+            pass
+    return []
 
 
 class PropertyBase(BaseModel):
@@ -49,7 +74,7 @@ class ACMCreate(PropertyBase):
     nombre: str
     notas: Optional[str] = None
     direccion: str
-    stage: StageACM = StageACM.borrador
+    stage: str = "nuevo"
 
 
 class ACMUpdate(BaseModel):
@@ -68,7 +93,12 @@ class ACMUpdate(BaseModel):
     cochera: Optional[bool] = None
     pileta: Optional[bool] = None
     distribucion: Optional[Distribucion] = None
-    stage: Optional[StageACM] = None
+    stage: Optional[str] = None
+
+    @field_validator("stage", mode="before")
+    @classmethod
+    def normalize_stage(cls, v):
+        return _coerce_stage(v) if v is not None else None
 
 
 class ComparableCreate(PropertyBase):
@@ -188,7 +218,9 @@ class ACMRead(BaseModel):
     cochera: bool
     pileta: bool
     distribucion: Optional[Distribucion]
-    stage: Optional[StageACM] = StageACM.borrador
+    stage: str = "nuevo"
+    current_step: str = "sujeto"
+    steps_completed: list[str] = []
     approval_status: ApprovalStatus = ApprovalStatus.no_requerida
     approved_at: Optional[datetime] = None
     owner_id: Optional[int] = None
@@ -196,6 +228,16 @@ class ACMRead(BaseModel):
     requires_approval: bool = False
     comparables: list[ComparableRead] = []
     approval_comments: list["ApprovalCommentRead"] = []
+
+    @field_validator("stage", mode="before")
+    @classmethod
+    def normalize_stage(cls, v):
+        return _coerce_stage(v)
+
+    @field_validator("steps_completed", mode="before")
+    @classmethod
+    def parse_steps(cls, v):
+        return _coerce_steps(v)
 
     @computed_field
     @property
@@ -215,12 +257,24 @@ class ACMSummary(BaseModel):
     fecha_creacion: datetime
     updated_at: Optional[datetime] = None
     direccion: str
-    stage: Optional[StageACM] = StageACM.borrador
+    stage: str = "nuevo"
+    current_step: str = "sujeto"
+    steps_completed: list[str] = []
     approval_status: ApprovalStatus = ApprovalStatus.no_requerida
     owner_id: Optional[int] = None
     owner_username: Optional[str] = None
     requires_approval: bool = False
     cantidad_comparables: int = 0
+
+    @field_validator("stage", mode="before")
+    @classmethod
+    def normalize_stage(cls, v):
+        return _coerce_stage(v)
+
+    @field_validator("steps_completed", mode="before")
+    @classmethod
+    def parse_steps(cls, v):
+        return _coerce_steps(v)
 
 
 class ComparableResultado(BaseModel):
@@ -327,3 +381,17 @@ class PonderadoresDefaults(BaseModel):
 
 
 ACMRead.model_rebuild()
+
+
+class StepUpdateRequest(BaseModel):
+    step: str
+    completed: bool = True
+
+
+class StageUpdateRequest(BaseModel):
+    stage: str
+
+    @field_validator("stage", mode="before")
+    @classmethod
+    def normalize(cls, v):
+        return _coerce_stage(v)

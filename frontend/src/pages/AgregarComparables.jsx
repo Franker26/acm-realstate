@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { addComparable, deleteComparable, extractZonaprop, getACM, updateComparable } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 import PropertyForm from '../components/PropertyForm.jsx'
+import SmartLoader from '../components/SmartLoader.jsx'
 
 const EMPTY_COMP = {
   url: '',
@@ -63,7 +64,9 @@ export default function AgregarComparables() {
   const [apiError, setApiError] = useState(null)
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState(null)
-  const [showForm, setShowForm] = useState(true)
+  const [extractPreview, setExtractPreview] = useState(null)
+  const [showForm, setShowForm] = useState(false)
+  const [pageReady, setPageReady] = useState(false)
   const { dispatch } = useWizard()
   const navigate = useNavigate()
 
@@ -71,7 +74,9 @@ export default function AgregarComparables() {
     getACM(id).then((acm) => {
       setComparables(acm.comparables)
       dispatch({ type: 'SET_ACM_ID', payload: acm.id })
-      if (acm.comparables.length > 0) setShowForm(false)
+      // Show form immediately only when there are no comparables yet
+      setShowForm(acm.comparables.length === 0)
+      setPageReady(true)
     })
   }, [id])
 
@@ -94,17 +99,27 @@ export default function AgregarComparables() {
     setExtractError(null)
     try {
       const data = await extractZonaprop(form.url)
-      setForm((prev) => ({
-        ...prev,
-        ...(data.precio != null ? { precio: String(data.precio) } : {}),
-        ...(data.dias_mercado != null ? { dias_mercado: String(data.dias_mercado) } : {}),
-        ...(data.direccion ? { direccion: data.direccion } : {}),
-      }))
+      setExtractPreview(data)
     } catch (e) {
       setExtractError(e.message)
     } finally {
       setExtracting(false)
     }
+  }
+
+  function handleConfirmExtract() {
+    const data = extractPreview
+    setForm((prev) => ({
+      ...prev,
+      ...(data.precio != null ? { precio: String(data.precio) } : {}),
+      ...(data.dias_mercado != null ? { dias_mercado: String(data.dias_mercado) } : {}),
+      ...(data.direccion ? { direccion: data.direccion } : {}),
+      ...(data.superficie_cubierta != null ? { superficie_cubierta: String(data.superficie_cubierta) } : {}),
+      ...(data.tipo ? { tipo: data.tipo } : {}),
+      ...(data.orientacion ? { orientacion: data.orientacion } : {}),
+      ...(data.antiguedad != null ? { antiguedad: String(data.antiguedad) } : {}),
+    }))
+    setExtractPreview(null)
   }
 
   async function handleSubmit(e) {
@@ -172,8 +187,13 @@ export default function AgregarComparables() {
     setShowForm(false)
   }
 
+  const logoSrc = typeof localStorage !== 'undefined' ? localStorage.getItem('acm_theme_logo') : null
+
+  if (!pageReady) return null
+
   return (
     <div>
+      <SmartLoader loading={extracting} logoSrc={logoSrc} />
       <WizardNav currentStep={2} />
       <div className="step-header">
         <h1>Agregar Comparables</h1>
@@ -245,7 +265,7 @@ export default function AgregarComparables() {
                       disabled={extracting}
                       style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
                     >
-                      {extracting ? <span className="spinner" /> : '⬇ Extraer datos'}
+                      {extracting ? 'Extrayendo...' : '⬇ Extraer datos'}
                     </button>
                   )}
                 </div>
@@ -315,6 +335,61 @@ export default function AgregarComparables() {
       {comparables.length === 0 && (
         <p className="error-msg" style={{ textAlign: 'right', marginTop: 4 }}>Agregá al menos una comparable para continuar.</p>
       )}
+
+      {extractPreview && (
+        <div style={modalStyles.overlay}>
+          <div style={modalStyles.box}>
+            <h3 style={{ marginTop: 0 }}>Datos extraídos de Zonaprop</h3>
+            <p style={{ color: '#666', marginBottom: 16 }}>Revisá los datos encontrados y confirmá para cargarlos en el formulario.</p>
+            <table style={modalStyles.table}>
+              <tbody>
+                {extractPreview.precio != null && (
+                  <tr><td style={modalStyles.label}>Precio</td><td><strong>USD {extractPreview.precio.toLocaleString('es-AR')}</strong></td></tr>
+                )}
+                {extractPreview.direccion && (
+                  <tr><td style={modalStyles.label}>Dirección</td><td>{extractPreview.direccion}</td></tr>
+                )}
+                {extractPreview.superficie_cubierta != null && (
+                  <tr><td style={modalStyles.label}>Sup. cubierta</td><td>{extractPreview.superficie_cubierta} m²</td></tr>
+                )}
+                {extractPreview.tipo && (
+                  <tr><td style={modalStyles.label}>Tipo</td><td>{extractPreview.tipo}</td></tr>
+                )}
+                {extractPreview.dias_mercado != null && (
+                  <tr><td style={modalStyles.label}>Días en mercado</td><td>{extractPreview.dias_mercado}</td></tr>
+                )}
+                {extractPreview.orientacion && (
+                  <tr><td style={modalStyles.label}>Orientación</td><td>{extractPreview.orientacion}</td></tr>
+                )}
+                {extractPreview.antiguedad != null && (
+                  <tr><td style={modalStyles.label}>Antigüedad</td><td>{extractPreview.antiguedad} años</td></tr>
+                )}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setExtractPreview(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleConfirmExtract}>Confirmar e insertar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+const modalStyles = {
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+  },
+  box: {
+    background: '#fff', borderRadius: 12, padding: 32, maxWidth: 480, width: '90%',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+  },
+  table: {
+    width: '100%', borderCollapse: 'collapse',
+  },
+  label: {
+    color: '#888', paddingRight: 16, paddingBottom: 8, verticalAlign: 'top', whiteSpace: 'nowrap',
+  },
 }

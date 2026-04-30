@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getACM, listPendingApprovals, reviewACM } from '../api.js'
-import { useAuth } from '../App.jsx'
+import { useAuth, useWizard } from '../App.jsx'
 
 const SECTION_OPTIONS = [
   { value: 'general', label: 'General' },
@@ -18,6 +18,7 @@ function emptyComment() {
 
 export default function Approvals() {
   const { user } = useAuth()
+  const { dispatch } = useWizard()
   const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [selectedId, setSelectedId] = useState(null)
@@ -196,7 +197,10 @@ export default function Approvals() {
                 </div>
 
                 <div className="btn-group" style={{ justifyContent: 'space-between' }}>
-                  <button className="btn btn-secondary" onClick={() => navigate(`/acm/${selected.id}/step/4`)}>
+                  <button className="btn btn-secondary" onClick={() => {
+                    dispatch({ type: 'SET_ACM_ID', payload: selected.id })
+                    navigate(`/acm/${selected.id}/step/4`)
+                  }}>
                     Abrir resultados
                   </button>
                   <div style={{ display: 'flex', gap: 8 }}>
