@@ -337,6 +337,33 @@ def update_branding_settings(
     return _get_branding_settings(db)
 
 
+class ScraperSettings(PydanticBase):
+    scraper_service_url: Optional[str] = None
+
+
+def _get_scraper_url(db: Session) -> str | None:
+    setting = db.query(AppSetting).filter(AppSetting.key == "scraper_service_url").first()
+    db_val = setting.value if setting and setting.value else None
+    return db_val or _SCRAPER_SERVICE_URL or None
+
+
+@app.get("/api/settings/scraper", response_model=ScraperSettings)
+def get_scraper_settings(db: Session = Depends(get_db)):
+    return ScraperSettings(scraper_service_url=_get_scraper_url(db))
+
+
+@app.put("/api/settings/scraper", response_model=ScraperSettings)
+def update_scraper_settings(body: ScraperSettings, request: Request, db: Session = Depends(get_db)):
+    _require_admin(request, db)
+    setting = db.query(AppSetting).filter(AppSetting.key == "scraper_service_url").first()
+    if not setting:
+        setting = AppSetting(key="scraper_service_url")
+        db.add(setting)
+    setting.value = body.scraper_service_url or ""
+    db.commit()
+    return ScraperSettings(scraper_service_url=_get_scraper_url(db))
+
+
 def _parse_steps(raw: str | None) -> list[str]:
     if not raw:
         return []
@@ -1002,17 +1029,18 @@ async def _fetch_zonaprop(url: str) -> str:
 
 
 @app.post("/api/zonaprop/extract")
-async def extract_zonaprop(body: ZonapropExtractRequest):
+async def extract_zonaprop(body: ZonapropExtractRequest, db: Session = Depends(get_db)):
     url = body.url.strip()
     if "zonaprop.com.ar" not in url:
         raise HTTPException(400, "La URL debe ser de zonaprop.com.ar")
 
     # Delegate to local scraper microservice if configured (bypasses cloud IP blocking)
-    if _SCRAPER_SERVICE_URL:
+    scraper_url = _get_scraper_url(db)
+    if scraper_url:
         try:
             headers = {"Authorization": f"Bearer {_SCRAPER_SERVICE_TOKEN}"} if _SCRAPER_SERVICE_TOKEN else {}
             async with httpx.AsyncClient(timeout=30) as client:
-                r = await client.post(f"{_SCRAPER_SERVICE_URL}/extract", json={"url": url}, headers=headers)
+                r = await client.post(f"{scraper_url}/extract", json={"url": url}, headers=headers)
             if r.status_code == 200:
                 return r.json()
             raise HTTPException(r.status_code, r.text)

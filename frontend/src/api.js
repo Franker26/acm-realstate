@@ -82,3 +82,5 @@ export const reviewACM = (id, data) => request('PUT', `/api/acm/${id}/approval`,
 export const getBrandingSettings = () =>
   request('GET', '/api/settings/branding', undefined, { auth: false, redirectOn401: false })
 export const updateBrandingSettings = (data) => request('PUT', '/api/settings/branding', data)
+export const getScraperSettings = () => request('GET', '/api/settings/scraper')
+export const updateScraperSettings = (data) => request('PUT', '/api/settings/scraper', data)
