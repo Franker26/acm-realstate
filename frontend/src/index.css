@@ -1793,6 +1793,11 @@ body::before {
   color: var(--text);
 }
 
+.home-mobile-greeting,
+.home-mobile-section-label {
+  display: none;
+}
+
 .home-kanban-hero__actions {
   display: flex;
   flex-direction: column;
@@ -2401,6 +2406,10 @@ body::before {
 
 .login-card--featured {
   max-width: 440px;
+}
+
+.login-card__brand-mobile {
+  display: none;
 }
 
 .login-card__rail {
@@ -3609,6 +3618,10 @@ body::before {
   margin-bottom: 24px;
 }
 
+.results-mobile-comparables {
+  display: none;
+}
+
 .kpi-card {
   text-align: left;
 }
@@ -3914,6 +3927,549 @@ body::before {
 
   .price-chart-shell {
     height: 220px;
+  }
+}
+
+@media (max-width: 768px) {
+  body::before {
+    background-size: 18px 18px;
+    opacity: 0.25;
+  }
+
+  .app-main {
+    max-width: 430px;
+    margin: 0 auto;
+    padding: 12px 10px 92px;
+  }
+
+  .app-header {
+    padding: 10px 10px 0;
+  }
+
+  .app-header__shell {
+    max-width: 430px;
+    padding: 10px 12px;
+    border-radius: 18px;
+  }
+
+  .app-title {
+    gap: 10px;
+  }
+
+  .app-title__meta {
+    display: none;
+  }
+
+  .app-title__name {
+    font-size: 14px;
+  }
+
+  .wizard-nav {
+    overflow-x: auto;
+    border-radius: 18px;
+  }
+
+  .wizard-step {
+    min-width: 88px;
+    padding: 10px;
+    border-right: none;
+    border-radius: 14px;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    gap: 6px;
+  }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+  }
+
+  .home-mobile-greeting {
+    display: block;
+    margin: 6px 0 10px;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.03em;
+  }
+
+  .home-mobile-section-label {
+    display: block;
+    margin: 6px 0 10px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  .home-kanban-hero {
+    gap: 16px;
+  }
+
+  .home-kanban-hero h1,
+  .step-header h1 {
+    font-size: 26px;
+    line-height: 1.02;
+  }
+
+  .home-kanban-hero p,
+  .step-header p {
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .home-kanban-hero__signals {
+    display: none;
+  }
+
+  .home-kanban-hero__hint {
+    font-size: 12px;
+  }
+
+  .home-kanban-hero__actions .btn {
+    width: 100%;
+    min-height: 46px;
+    border-radius: 14px;
+  }
+
+  .dashboard-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .dashboard-metric {
+    padding: 12px 10px;
+    border-radius: 16px;
+  }
+
+  .dashboard-metric__label {
+    margin-bottom: 8px;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+  }
+
+  .dashboard-metric__value {
+    font-size: 20px;
+  }
+
+  .dashboard-metric__note {
+    display: none;
+  }
+
+  .kanban-column {
+    padding: 14px;
+    border-radius: 20px;
+  }
+
+  .kanban-card {
+    border-radius: 18px;
+  }
+
+  .workflow-aside {
+    display: none;
+  }
+
+  .workflow-card {
+    padding: 16px;
+  }
+
+  .section-heading {
+    margin-bottom: 14px;
+  }
+
+  .section-heading h2 {
+    font-size: 16px;
+  }
+
+  .form-group label,
+  .login-card .form-group label {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea,
+  .login-card .form-group input {
+    min-height: 46px;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+
+  .btn-group--workspace,
+  .btn-group {
+    position: sticky;
+    bottom: 10px;
+    z-index: 15;
+    margin-top: 16px;
+    padding: 10px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid #dbe3ee;
+    box-shadow: 0 18px 34px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(16px);
+  }
+
+  .btn-group__hint {
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .btn-group .btn,
+  .btn-group--workspace .btn {
+    min-height: 46px;
+    border-radius: 14px;
+  }
+
+  .kpi-hero {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .kpi-hero-label {
+    font-size: 10px;
+  }
+
+  .kpi-hero-value {
+    font-size: 28px;
+  }
+
+  .kpi-hero-sub {
+    font-size: 11px;
+  }
+
+  .results-mobile-comparables {
+    display: block;
+    margin-bottom: 16px;
+  }
+
+  .results-mobile-comparables__list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .results-mobile-card {
+    padding: 14px;
+    border-radius: 18px;
+    background: #fff;
+    border: 1px solid #dde5ee;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  }
+
+  .results-mobile-card__top,
+  .results-mobile-card__bottom {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .results-mobile-card__top strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .results-mobile-card__top span,
+  .results-mobile-card__bottom span {
+    display: block;
+    font-size: 10px;
+    color: #667085;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .results-mobile-card__factor {
+    min-width: 52px;
+    padding: 8px 0;
+    border-radius: 999px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--primary);
+    background: #eef2ff;
+  }
+
+  .results-mobile-card__bottom {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #edf2f7;
+  }
+
+  .results-mobile-card__bottom strong {
+    display: block;
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .workspace-table {
+    display: none;
+  }
+
+  .login-brand-panel {
+    display: none;
+  }
+
+  .login-form-panel {
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  .login-card {
+    padding: 22px 18px;
+  }
+
+  .login-card__brand-mobile {
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+
+  .login-card__brand-mobile-mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.12), rgba(139, 92, 246, 0.18));
+    color: var(--primary);
+    font-weight: 900;
+  }
+
+  .login-card__brand-mobile strong {
+    font-size: 18px;
+    color: var(--text);
+  }
+
+  .login-card__brand-mobile span {
+    font-size: 12px;
+    color: #667085;
+  }
+
+  .login-card__rail,
+  .login-card__support,
+  .login-card__footer,
+  .login-card__footnote {
+    display: none;
+  }
+
+  .login-card__header h2 {
+    font-size: 24px;
+  }
+
+  .approvals-layout {
+    gap: 12px;
+  }
+
+  .approvals-layout > .card:first-child {
+    padding-bottom: 14px;
+  }
+
+  .approvals-layout > .card:last-child {
+    padding-top: 16px;
+  }
+
+  .approvals-list {
+    gap: 8px;
+  }
+
+  .approvals-list__item {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .approvals-list__item strong {
+    font-size: 13px;
+  }
+
+  .approvals-list__item span {
+    font-size: 11px;
+  }
+
+  .approvals-detail {
+    gap: 14px;
+  }
+
+  .approvals-detail__hero {
+    padding: 14px;
+    border-radius: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+
+  .approvals-detail__title {
+    font-size: 16px;
+  }
+
+  .approval-summary > div {
+    border-radius: 14px;
+  }
+
+  .approval-comment-row {
+    padding: 12px;
+    border-radius: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+
+  .approval-comment-row select,
+  .approval-comment-row textarea {
+    border-radius: 12px;
+  }
+
+  .workflow-toolbar {
+    margin-bottom: 10px;
+  }
+
+  .workflow-toolbar__group {
+    width: 100%;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .workflow-toolbar__label {
+    font-size: 10px;
+  }
+
+  .alert-info--compact {
+    font-size: 12px;
+    border-radius: 14px;
+  }
+
+  .comparable-adjustment-card {
+    border-radius: 18px;
+    padding: 14px;
+  }
+
+  .comparable-adjustment-card__header {
+    gap: 10px;
+  }
+
+  .comparable-adjustment-card__title {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .comparable-adjustment-card__meta {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .comparable-adjustment-card__totals {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .comparable-adjustment-card__badge {
+    min-width: 74px;
+    text-align: center;
+  }
+
+  .comparable-adjustment-card__value {
+    font-size: 13px;
+    text-align: right;
+  }
+
+  .factor-grid {
+    gap: 12px;
+  }
+
+  .factor-row {
+    padding: 12px;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+
+  .factor-row-label {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .factor-row-track-wrap {
+    margin-top: 4px;
+  }
+
+  .factor-slider {
+    min-height: 28px;
+  }
+
+  .factor-row-pct {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-main {
+    padding: 10px 8px 90px;
+  }
+
+  .app-title__name {
+    font-size: 13px;
+  }
+
+  .home-kanban-hero h1,
+  .step-header h1,
+  .login-card__header h2 {
+    font-size: 24px;
+  }
+
+  .dashboard-metric {
+    padding: 10px 8px;
+  }
+
+  .dashboard-metric__value {
+    font-size: 18px;
+  }
+
+  .home-mobile-greeting {
+    font-size: 20px;
+  }
+
+  .dashboard-metrics {
+    gap: 6px;
+  }
+
+  .dashboard-metric__label {
+    font-size: 8px;
+  }
+
+  .dashboard-metric__value {
+    font-size: 17px;
+  }
+
+  .results-mobile-card,
+  .approval-comment-row,
+  .comparable-adjustment-card,
+  .kanban-card {
+    border-radius: 16px;
+  }
+
+  .results-mobile-card__top,
+  .results-mobile-card__bottom,
+  .comparable-adjustment-card__totals {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .results-mobile-card__factor {
+    min-width: 0;
+    width: auto;
+    padding-inline: 10px;
   }
 }
 

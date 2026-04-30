@@ -76,6 +76,13 @@ function comparablesLabel(acm) {
   return `${count} comparable${count === 1 ? '' : 's'}`
 }
 
+function greeting() {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Buenos días'
+  if (hour < 20) return 'Buenas tardes'
+  return 'Buenas noches'
+}
+
 export default function Home() {
   const [acms, setAcms] = useState([])
   const [loading, setLoading] = useState(true)
@@ -204,6 +211,7 @@ export default function Home() {
       <div className="home-kanban-hero">
         <div className="home-kanban-hero__copy">
           <span className="page-eyebrow">Workspace operativo</span>
+          <div className="home-mobile-greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</div>
           <h1>Tablero de tasaciones</h1>
           <p>
             {user?.is_admin
@@ -258,6 +266,8 @@ export default function Home() {
               </article>
             ))}
           </section>
+
+          <div className="home-mobile-section-label">Recientes</div>
 
           <div className="kanban-board">
             {COLUMNS.map((column) => {

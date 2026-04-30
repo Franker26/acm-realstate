@@ -150,6 +150,38 @@ export default function ResultadosDashboard() {
         />
       </div>
 
+      <div className="results-mobile-comparables">
+        <div className="section-heading">
+          <div>
+            <span className="section-heading__eyebrow">Comparables</span>
+            <h2>Lectura rápida del mercado</h2>
+          </div>
+        </div>
+        <div className="results-mobile-comparables__list">
+          {comparables.map((c, i) => (
+            <article key={c.id} className="results-mobile-card">
+              <div className="results-mobile-card__top">
+                <div>
+                  <strong>{c.direccion || c.url?.slice(0, 32) || `Comparable ${i + 1}`}</strong>
+                  <span>{fmtUSD(c.precio)} · {fmtM2(c.precio_m2_publicado)}</span>
+                </div>
+                <div className="results-mobile-card__factor">{c.factor_total.toFixed(3)}</div>
+              </div>
+              <div className="results-mobile-card__bottom">
+                <div>
+                  <span>Ajustado</span>
+                  <strong>{fmtM2(c.precio_ajustado_m2)}</strong>
+                </div>
+                <div>
+                  <span>Total estimado</span>
+                  <strong>{fmtUSD(c.precio_ajustado_m2 * supHomo)}</strong>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+
       {/* Tabla comparables */}
       <div className="card workflow-card">
         <div className="section-heading">
