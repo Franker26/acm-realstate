@@ -41,6 +41,8 @@ from models import (
     ApprovalStatus,
     Base,
     Comparable,
+    Company,
+    CompanySetting,
     SessionLocal,
     StageACM,
     User,
@@ -55,6 +57,7 @@ _TOKEN_EXPIRE_DAYS = 7
 # Rutas que no requieren token
 _PUBLIC_PATHS = {
     "/api/auth/login",
+    "/api/admin/login",
     "/api/ponderadores/defaults",
     "/api/settings/branding",
 }
@@ -98,6 +101,7 @@ from schemas import (
     ACMRead,
     ACMSummary,
     ACMUpdate,
+    AdminUserCreate,
     ApprovalCommentRead,
     ApprovalReviewRequest,
     BrandingSettings,
@@ -105,6 +109,9 @@ from schemas import (
     ComparableRead,
     ComparableResultado,
     ComparableUpdate,
+    CompanyCreate,
+    CompanyRead,
+    CompanyUpdate,
     PonderadoresDefaults,
     ResultadoResponse,
     StageUpdateRequest,
@@ -118,12 +125,16 @@ from schemas import (
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
-        # Postgres: convert stage column from native enum to varchar
+        # Postgres-specific column migrations (no-ops on SQLite if column exists)
         for stmt in (
             "ALTER TABLE acm ALTER COLUMN stage TYPE VARCHAR USING stage::text",
             "ALTER TABLE acm ADD COLUMN IF NOT EXISTS current_step VARCHAR DEFAULT 'sujeto'",
             "ALTER TABLE acm ADD COLUMN IF NOT EXISTS steps_completed VARCHAR DEFAULT '[]'",
             "ALTER TABLE acm ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
+            # Multi-tenant columns
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superadmin BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id INTEGER",
+            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS company_id INTEGER",
         ):
             try:
                 db.execute(text(stmt))
@@ -136,14 +147,50 @@ async def lifespan(app: FastAPI):
                 acm.updated_at = acm.fecha_creacion
             if acm.approval_status is None:
                 _mark_acm_pending_if_required(acm)
-            # Migrate legacy stage values
             if acm.stage in _STAGE_MIGRATION:
                 acm.stage = _STAGE_MIGRATION[acm.stage]
-            # Set defaults for new step fields
             if not acm.current_step:
                 acm.current_step = "sujeto"
             if not acm.steps_completed:
                 acm.steps_completed = "[]"
+        db.commit()
+
+        # --- Multi-tenant bootstrap ---
+        # 1. Create default company if none exist
+        if db.query(Company).count() == 0:
+            default_co = Company(name="Default")
+            db.add(default_co)
+            db.commit()
+            db.refresh(default_co)
+        else:
+            default_co = db.query(Company).order_by(Company.id).first()
+
+        default_cid = default_co.id
+
+        # 2. Assign users without company to default
+        db.query(User).filter(User.company_id.is_(None)).update(
+            {User.company_id: default_cid}, synchronize_session=False
+        )
+        db.commit()
+
+        # 3. Assign ACMs without company to default
+        db.query(ACM).filter(ACM.company_id.is_(None)).update(
+            {ACM.company_id: default_cid}, synchronize_session=False
+        )
+        db.commit()
+
+        # 4. Copy legacy AppSetting → CompanySetting for default company
+        for setting in db.query(AppSetting).all():
+            exists = db.query(CompanySetting).filter(
+                CompanySetting.company_id == default_cid,
+                CompanySetting.key == setting.key,
+            ).first()
+            if not exists:
+                db.add(CompanySetting(
+                    company_id=default_cid,
+                    key=setting.key,
+                    value=setting.value,
+                ))
         db.commit()
     yield
 
@@ -181,6 +228,8 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == body.username).first()
     if not user or not _verify_password(body.password, user.hashed_password):
         raise HTTPException(401, "Usuario o contraseña incorrectos")
+    if user.is_superadmin:
+        raise HTTPException(403, "Acceso de superadmin no permitido desde esta pantalla. Usá /admin.")
     return {
         "access_token": _create_token(user.username),
         "token_type": "bearer",
@@ -188,6 +237,8 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         "is_admin": user.is_admin,
         "is_approver": user.is_approver,
         "needs_approval": user.needs_approval,
+        "company_id": user.company_id,
+        "company_name": user.company.name if user.company else None,
     }
 
 
@@ -200,6 +251,8 @@ def me(request: Request, db: Session = Depends(get_db)):
         "is_admin": user.is_admin,
         "is_approver": user.is_approver,
         "needs_approval": user.needs_approval,
+        "company_id": user.company_id,
+        "company_name": user.company.name if user.company else None,
     }
 
 
@@ -231,6 +284,33 @@ def _require_approver(request: Request, db: Session) -> User:
     return user
 
 
+def _require_superadmin(request: Request, db: Session) -> User:
+    user = _current_user(request, db)
+    if not user.is_superadmin:
+        raise HTTPException(403, "Se requieren permisos de superadmin")
+    return user
+
+
+def _get_company_setting(db: Session, company_id: int, key: str) -> Optional[str]:
+    s = db.query(CompanySetting).filter(
+        CompanySetting.company_id == company_id,
+        CompanySetting.key == key,
+    ).first()
+    return s.value if s else None
+
+
+def _save_company_setting(db: Session, company_id: int, key: str, value: str) -> None:
+    s = db.query(CompanySetting).filter(
+        CompanySetting.company_id == company_id,
+        CompanySetting.key == key,
+    ).first()
+    if not s:
+        s = CompanySetting(company_id=company_id, key=key)
+        db.add(s)
+    s.value = value
+    db.commit()
+
+
 def _serialize_user(user: User) -> UserRead:
     return UserRead(
         id=user.id,
@@ -238,6 +318,7 @@ def _serialize_user(user: User) -> UserRead:
         is_admin=user.is_admin,
         is_approver=user.is_approver,
         needs_approval=user.needs_approval,
+        company_id=user.company_id,
     )
 
 
@@ -247,14 +328,19 @@ class ChangePasswordRequest(PydanticBase):
 
 @app.get("/api/users", response_model=list[UserRead])
 def list_users(request: Request, db: Session = Depends(get_db)):
-    _require_admin(request, db)
-    users = db.query(User).order_by(User.id).all()
+    current = _require_admin(request, db)
+    users = (
+        db.query(User)
+        .filter(User.company_id == current.company_id, User.is_superadmin.is_(False))
+        .order_by(User.id)
+        .all()
+    )
     return [_serialize_user(u) for u in users]
 
 
 @app.post("/api/users", response_model=UserRead, status_code=201)
 def create_user(body: UserCreate, request: Request, db: Session = Depends(get_db)):
-    _require_admin(request, db)
+    current = _require_admin(request, db)
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(409, f"El usuario '{body.username}' ya existe")
     user = User(
@@ -263,6 +349,7 @@ def create_user(body: UserCreate, request: Request, db: Session = Depends(get_db
         is_admin=body.is_admin,
         is_approver=body.is_approver,
         needs_approval=body.needs_approval,
+        company_id=current.company_id,
     )
     db.add(user)
     db.commit()
@@ -322,19 +409,26 @@ def change_user_password(user_id: int, body: ChangePasswordRequest, request: Req
 
 
 @app.get("/api/settings/branding", response_model=BrandingSettings)
-def get_branding_settings(db: Session = Depends(get_db)):
-    return _get_branding_settings(db)
+def get_branding_settings(request: Request, db: Session = Depends(get_db)):
+    # Public endpoint: try to get company from auth token, fallback to first company
+    company_id: Optional[int] = None
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            username = _decode_token(auth.split(" ", 1)[1])
+            user = db.query(User).filter(User.username == username).first()
+            if user:
+                company_id = user.company_id
+        except Exception:
+            pass
+    return _get_branding_settings(db, company_id)
 
 
 @app.put("/api/settings/branding", response_model=BrandingSettings)
-def update_branding_settings(
-    body: BrandingSettings,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    _require_admin(request, db)
-    _save_branding_settings(body, db)
-    return _get_branding_settings(db)
+def update_branding_settings(body: BrandingSettings, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    _save_branding_settings(body, db, current.company_id)
+    return _get_branding_settings(db, current.company_id)
 
 
 class IntegrationSettings(PydanticBase):
@@ -354,28 +448,19 @@ _ML_REDIRECT_URI = os.getenv(
 )
 
 
-def _get_integration_settings_dict(db: Session) -> dict:
+def _get_integration_settings_dict(db: Session, company_id: int) -> dict:
     env_fallback = {"scraper_service_url": _SCRAPER_SERVICE_URL, "scraper_service_token": _SCRAPER_SERVICE_TOKEN}
     payload = {}
     for key in _INTEGRATION_KEYS + _ML_TOKEN_KEYS:
-        s = db.query(AppSetting).filter(AppSetting.key == key).first()
-        payload[key] = (s.value if s and s.value else None) or env_fallback.get(key)
+        val = _get_company_setting(db, company_id, key)
+        payload[key] = (val if val else None) or env_fallback.get(key)
     return payload
-
-
-def _save_setting(db: Session, key: str, value: str) -> None:
-    s = db.query(AppSetting).filter(AppSetting.key == key).first()
-    if not s:
-        s = AppSetting(key=key)
-        db.add(s)
-    s.value = value
-    db.commit()
 
 
 @app.get("/api/settings/integrations", response_model=IntegrationSettings)
 def get_integration_settings(request: Request, db: Session = Depends(get_db)):
-    _require_admin(request, db)
-    raw = _get_integration_settings_dict(db)
+    current = _require_admin(request, db)
+    raw = _get_integration_settings_dict(db, current.company_id)
     return IntegrationSettings(
         scraper_service_url=raw.get("scraper_service_url"),
         scraper_service_token="***" if raw.get("scraper_service_token") else None,
@@ -388,26 +473,21 @@ def get_integration_settings(request: Request, db: Session = Depends(get_db)):
 
 @app.put("/api/settings/integrations", response_model=IntegrationSettings)
 def update_integration_settings(body: IntegrationSettings, request: Request, db: Session = Depends(get_db)):
-    _require_admin(request, db)
+    current = _require_admin(request, db)
     for key, value in body.model_dump().items():
         if key in ("ml_connected", "ml_user_nickname"):
-            continue  # read-only, managed by OAuth flow
+            continue
         if value == "***":
-            continue  # skip masked fields
-        s = db.query(AppSetting).filter(AppSetting.key == key).first()
-        if not s:
-            s = AppSetting(key=key)
-            db.add(s)
-        s.value = value or ""
-    db.commit()
+            continue
+        _save_company_setting(db, current.company_id, key, value or "")
     return get_integration_settings(request, db)
 
 
 @app.get("/api/settings/integrations/ml-auth-url")
 def ml_auth_url(request: Request, db: Session = Depends(get_db)):
     import urllib.parse
-    _require_admin(request, db)
-    raw = _get_integration_settings_dict(db)
+    current = _require_admin(request, db)
+    raw = _get_integration_settings_dict(db, current.company_id)
     app_id = raw.get("ml_app_id")
     if not app_id:
         raise HTTPException(400, "Configurá el App ID de MercadoLibre primero.")
@@ -427,8 +507,8 @@ class MlExchangeRequest(PydanticBase):
 @app.post("/api/settings/integrations/ml-exchange")
 async def ml_exchange_code(body: MlExchangeRequest, request: Request, db: Session = Depends(get_db)):
     import time as _time
-    _require_admin(request, db)
-    raw = _get_integration_settings_dict(db)
+    current = _require_admin(request, db)
+    raw = _get_integration_settings_dict(db, current.company_id)
     app_id = raw.get("ml_app_id")
     secret = raw.get("ml_app_secret")
     if not app_id or not secret:
@@ -470,17 +550,40 @@ async def ml_exchange_code(body: MlExchangeRequest, request: Request, db: Sessio
         ("ml_token_expires_at", expires_at),
         ("ml_user_nickname", nickname),
     ]:
-        _save_setting(db, key, value)
+        _save_company_setting(db, current.company_id, key, value)
 
     return {"status": "connected", "nickname": nickname}
 
 
 @app.delete("/api/settings/integrations/ml-disconnect")
 def ml_disconnect(request: Request, db: Session = Depends(get_db)):
-    _require_admin(request, db)
+    current = _require_admin(request, db)
     for key in ["ml_access_token", "ml_refresh_token", "ml_token_expires_at", "ml_user_nickname"]:
-        _save_setting(db, key, "")
+        _save_company_setting(db, current.company_id, key, "")
     return {"status": "disconnected"}
+
+
+_SENSITIVE_SETTING_KEYS = {
+    "ml_app_secret", "ml_access_token", "ml_refresh_token", "scraper_service_token"
+}
+
+
+@app.get("/api/settings/params")
+def get_system_params(request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    settings = (
+        db.query(CompanySetting)
+        .filter(CompanySetting.company_id == current.company_id)
+        .order_by(CompanySetting.key)
+        .all()
+    )
+    return [
+        {
+            "key": s.key,
+            "value": "***" if s.key in _SENSITIVE_SETTING_KEYS and s.value else (s.value or ""),
+        }
+        for s in settings
+    ]
 
 
 def _parse_steps(raw: str | None) -> list[str]:
@@ -536,22 +639,23 @@ _BRANDING_DEFAULTS = {
 }
 
 
-def _get_branding_settings(db: Session) -> BrandingSettings:
+def _get_first_company_id(db: Session) -> Optional[int]:
+    co = db.query(Company).order_by(Company.id).first()
+    return co.id if co else None
+
+
+def _get_branding_settings(db: Session, company_id: Optional[int] = None) -> BrandingSettings:
+    cid = company_id or _get_first_company_id(db)
     payload = {}
     for key, default in _BRANDING_DEFAULTS.items():
-        setting = db.query(AppSetting).filter(AppSetting.key == key).first()
-        payload[key] = setting.value if setting and setting.value is not None else default
+        val = _get_company_setting(db, cid, key) if cid else None
+        payload[key] = val if val is not None else default
     return BrandingSettings(**payload)
 
 
-def _save_branding_settings(body: BrandingSettings, db: Session):
+def _save_branding_settings(body: BrandingSettings, db: Session, company_id: int) -> None:
     for key, value in body.model_dump().items():
-        setting = db.query(AppSetting).filter(AppSetting.key == key).first()
-        if not setting:
-            setting = AppSetting(key=key)
-            db.add(setting)
-        setting.value = value
-    db.commit()
+        _save_company_setting(db, company_id, key, value if value is not None else "")
 
 
 def _make_snapshot(obj) -> calc.PropertySnapshot:
@@ -616,6 +720,8 @@ def _get_acm_checked(acm_id: int, request: Request, db: Session) -> ACM:
 
 
 def _check_acm_access(acm: ACM, current: User):
+    if acm.company_id != current.company_id:
+        raise HTTPException(403, "Sin acceso a este ACM")
     if not current.is_admin and acm.owner_id != current.id:
         raise HTTPException(403, "Sin acceso a este ACM")
 
@@ -623,7 +729,7 @@ def _check_acm_access(acm: ACM, current: User):
 @app.post("/api/acm", response_model=ACMRead, status_code=201)
 def create_acm(body: ACMCreate, request: Request, db: Session = Depends(get_db)):
     current = _current_user(request, db)
-    acm = ACM(**body.model_dump(exclude=_COMPUTED_FIELDS), owner_id=current.id)
+    acm = ACM(**body.model_dump(exclude=_COMPUTED_FIELDS), owner_id=current.id, company_id=current.company_id)
     _mark_acm_pending_if_required(acm)
     db.add(acm)
     db.commit()
@@ -640,7 +746,11 @@ def get_stages():
 @app.get("/api/acm", response_model=list[ACMSummary])
 def list_acms(request: Request, db: Session = Depends(get_db)):
     current = _current_user(request, db)
-    query = db.query(ACM).filter(ACM.deleted_at.is_(None)).order_by(ACM.fecha_creacion.desc())
+    query = (
+        db.query(ACM)
+        .filter(ACM.deleted_at.is_(None), ACM.company_id == current.company_id)
+        .order_by(ACM.fecha_creacion.desc())
+    )
     if not current.is_admin:
         query = query.filter(ACM.owner_id == current.id)
     result = []
@@ -767,10 +877,10 @@ def delete_comparable(acm_id: int, cid: int, request: Request, db: Session = Dep
 
 @app.get("/api/approvals/pending", response_model=list[ACMSummary])
 def list_pending_approvals(request: Request, db: Session = Depends(get_db)):
-    _require_approver(request, db)
+    current = _require_approver(request, db)
     query = (
         db.query(ACM)
-        .filter(ACM.approval_status == ApprovalStatus.pendiente)
+        .filter(ACM.approval_status == ApprovalStatus.pendiente, ACM.company_id == current.company_id)
         .order_by(ACM.updated_at.desc(), ACM.fecha_creacion.desc())
     )
     result = []
@@ -885,11 +995,182 @@ class ExtractRequest(PydanticBase):
 
 
 @app.post("/api/extract")
-async def extract_property(body: ExtractRequest, db: Session = Depends(get_db)):
+async def extract_property(body: ExtractRequest, request: Request, db: Session = Depends(get_db)):
     from integrations import extract as integration_extract
-    settings = _get_integration_settings_dict(db)
-    settings["_save_setting"] = lambda key, value: _save_setting(db, key, value)
+    current = _current_user(request, db)
+    settings = _get_integration_settings_dict(db, current.company_id)
+    settings["_save_setting"] = lambda key, value: _save_company_setting(db, current.company_id, key, value)
     return await integration_extract(body.url.strip(), settings)
+
+
+# ── Admin endpoints (/api/admin/*) ────────────────────────────────────────────
+
+@app.post("/api/admin/login")
+def admin_login(body: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == body.username).first()
+    if not user or not _verify_password(body.password, user.hashed_password):
+        raise HTTPException(401, "Usuario o contraseña incorrectos")
+    if not user.is_superadmin:
+        raise HTTPException(403, "Acceso restringido a superadmin")
+    return {
+        "access_token": _create_token(user.username),
+        "token_type": "bearer",
+        "username": user.username,
+        "is_superadmin": True,
+    }
+
+
+@app.get("/api/admin/companies")
+def admin_list_companies(request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    companies = db.query(Company).order_by(Company.id).all()
+    result = []
+    for co in companies:
+        user_count = db.query(User).filter(User.company_id == co.id, User.is_superadmin.is_(False)).count()
+        acm_count = db.query(ACM).filter(ACM.company_id == co.id, ACM.deleted_at.is_(None)).count()
+        result.append({
+            "id": co.id,
+            "name": co.name,
+            "created_at": co.created_at,
+            "user_count": user_count,
+            "acm_count": acm_count,
+        })
+    return result
+
+
+@app.post("/api/admin/companies", status_code=201)
+def admin_create_company(body: CompanyCreate, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    if db.query(Company).filter(Company.name == body.name).first():
+        raise HTTPException(409, f"La empresa '{body.name}' ya existe")
+    co = Company(name=body.name)
+    db.add(co)
+    db.commit()
+    db.refresh(co)
+    return {"id": co.id, "name": co.name, "created_at": co.created_at, "user_count": 0, "acm_count": 0}
+
+
+@app.get("/api/admin/companies/{company_id}")
+def admin_get_company(company_id: int, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    co = db.query(Company).filter(Company.id == company_id).first()
+    if not co:
+        raise HTTPException(404, "Empresa no encontrada")
+    user_count = db.query(User).filter(User.company_id == co.id, User.is_superadmin.is_(False)).count()
+    acm_count = db.query(ACM).filter(ACM.company_id == co.id, ACM.deleted_at.is_(None)).count()
+    return {"id": co.id, "name": co.name, "created_at": co.created_at, "user_count": user_count, "acm_count": acm_count}
+
+
+@app.patch("/api/admin/companies/{company_id}")
+def admin_update_company(company_id: int, body: CompanyUpdate, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    co = db.query(Company).filter(Company.id == company_id).first()
+    if not co:
+        raise HTTPException(404, "Empresa no encontrada")
+    co.name = body.name
+    db.commit()
+    db.refresh(co)
+    return {"id": co.id, "name": co.name, "created_at": co.created_at}
+
+
+@app.delete("/api/admin/companies/{company_id}", status_code=204)
+def admin_delete_company(company_id: int, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    co = db.query(Company).filter(Company.id == company_id).first()
+    if not co:
+        raise HTTPException(404, "Empresa no encontrada")
+    has_users = db.query(User).filter(User.company_id == company_id, User.is_superadmin.is_(False)).count() > 0
+    if has_users:
+        raise HTTPException(400, "No se puede eliminar una empresa con usuarios activos")
+    db.delete(co)
+    db.commit()
+
+
+@app.get("/api/admin/companies/{company_id}/users")
+def admin_list_company_users(company_id: int, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    users = (
+        db.query(User)
+        .filter(User.company_id == company_id, User.is_superadmin.is_(False))
+        .order_by(User.id)
+        .all()
+    )
+    return [_serialize_user(u) for u in users]
+
+
+@app.post("/api/admin/companies/{company_id}/users", status_code=201)
+def admin_create_company_user(company_id: int, body: AdminUserCreate, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    if not db.query(Company).filter(Company.id == company_id).first():
+        raise HTTPException(404, "Empresa no encontrada")
+    if db.query(User).filter(User.username == body.username).first():
+        raise HTTPException(409, f"El usuario '{body.username}' ya existe")
+    user = User(
+        username=body.username,
+        hashed_password=_hash_password(body.password),
+        is_admin=body.is_admin,
+        is_approver=body.is_approver,
+        needs_approval=body.needs_approval,
+        company_id=company_id,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _serialize_user(user)
+
+
+@app.patch("/api/admin/companies/{company_id}/users/{user_id}")
+def admin_update_company_user(company_id: int, user_id: int, body: UserUpdate, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    user = db.query(User).filter(User.id == user_id, User.company_id == company_id).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(user, field, value)
+    db.commit()
+    db.refresh(user)
+    return _serialize_user(user)
+
+
+@app.put("/api/admin/companies/{company_id}/users/{user_id}/password", status_code=204)
+def admin_change_company_user_password(
+    company_id: int, user_id: int, body: ChangePasswordRequest, request: Request, db: Session = Depends(get_db)
+):
+    _require_superadmin(request, db)
+    user = db.query(User).filter(User.id == user_id, User.company_id == company_id).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+    user.hashed_password = _hash_password(body.new_password)
+    db.commit()
+
+
+@app.delete("/api/admin/companies/{company_id}/users/{user_id}", status_code=204)
+def admin_delete_company_user(company_id: int, user_id: int, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    user = db.query(User).filter(User.id == user_id, User.company_id == company_id).first()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+    db.delete(user)
+    db.commit()
+
+
+@app.get("/api/admin/companies/{company_id}/acms")
+def admin_list_company_acms(company_id: int, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    acms = (
+        db.query(ACM)
+        .filter(ACM.company_id == company_id, ACM.deleted_at.is_(None))
+        .order_by(ACM.fecha_creacion.desc())
+        .all()
+    )
+    result = []
+    for acm in acms:
+        s = ACMSummary.model_validate(acm)
+        s.cantidad_comparables = len(acm.comparables)
+        s.owner_username = acm.owner.username if acm.owner else None
+        s.requires_approval = _requires_approval(acm)
+        result.append(s)
+    return result
 
 
 # --- Legacy Zonaprop parser (kept for scraper microservice — not used by main app) ---

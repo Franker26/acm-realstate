@@ -64,6 +64,29 @@ class ApprovalStatus(str, enum.Enum):
     cambios_solicitados = "Cambios solicitados"
 
 
+class Company(Base):
+    __tablename__ = "companies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    users = relationship("User", back_populates="company", foreign_keys="User.company_id")
+    settings = relationship("CompanySetting", back_populates="company", cascade="all, delete-orphan")
+    acms = relationship("ACM", back_populates="company", foreign_keys="ACM.company_id")
+
+
+class CompanySetting(Base):
+    """Per-company key-value store. Replaces the global AppSetting for all tenant data."""
+    __tablename__ = "company_settings"
+
+    company_id = Column(Integer, ForeignKey("companies.id"), primary_key=True)
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=True)
+
+    company = relationship("Company", back_populates="settings")
+
+
 class ACM(Base):
     __tablename__ = "acm"
 
@@ -88,6 +111,7 @@ class ACM(Base):
     distribucion = Column(Enum(Distribucion), nullable=True)
 
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
     stage = Column(String, nullable=True, default="nuevo")
     current_step = Column(String, nullable=True, default="sujeto")
     steps_completed = Column(String, nullable=True, default="[]")
@@ -101,6 +125,7 @@ class ACM(Base):
     comparables = relationship("Comparable", back_populates="acm", cascade="all, delete-orphan")
     owner = relationship("User", back_populates="acms", foreign_keys=[owner_id])
     approver = relationship("User", foreign_keys=[approved_by_id])
+    company = relationship("Company", back_populates="acms", foreign_keys=[company_id])
     approval_comments = relationship(
         "ApprovalComment",
         back_populates="acm",
@@ -163,7 +188,10 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_approver = Column(Boolean, default=False)
     needs_approval = Column(Boolean, default=False)
+    is_superadmin = Column(Boolean, default=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
 
+    company = relationship("Company", back_populates="users", foreign_keys=[company_id])
     acms = relationship("ACM", back_populates="owner", foreign_keys="ACM.owner_id")
 
 
@@ -183,6 +211,7 @@ class ApprovalComment(Base):
 
 
 class AppSetting(Base):
+    """Legacy global key-value store. Kept for backward compatibility during migration."""
     __tablename__ = "app_settings"
 
     key = Column(String, primary_key=True)
