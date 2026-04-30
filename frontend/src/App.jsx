@@ -305,7 +305,7 @@ function AppRoutes() {
       <Route path="/acm/:id/step/5" element={<PrivateRoute><ExportarPDF /></PrivateRoute>} />
       <Route path="/approvals" element={<PrivateRoute><Approvals /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
-      <Route path="/api/settings/integrations/ml-callback" element={<MlCallback />} />
+      <Route path="/ml-callback" element={<MlCallback />} />
     </Routes>
   )
 }
