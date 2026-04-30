@@ -28,8 +28,8 @@ _ORI_MAP = {
 
 
 def _extract_item_id(url: str) -> str | None:
-    m = re.search(r"(MLA\d+)", url)
-    return m.group(1) if m else None
+    m = re.search(r"MLA-?(\d+)", url)
+    return f"MLA{m.group(1)}" if m else None
 
 
 async def _get_token(app_id: str, secret: str) -> str:
