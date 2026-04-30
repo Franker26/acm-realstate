@@ -17,6 +17,7 @@ import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
 import Settings from './pages/Settings.jsx'
 import Approvals from './pages/Approvals.jsx'
+import MlCallback from './pages/MlCallback.jsx'
 import { getBrandingSettings, getCurrentUser, loginUser } from './api.js'
 
 // --- Auth ---
@@ -304,6 +305,7 @@ function AppRoutes() {
       <Route path="/acm/:id/step/5" element={<PrivateRoute><ExportarPDF /></PrivateRoute>} />
       <Route path="/approvals" element={<PrivateRoute><Approvals /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+      <Route path="/api/settings/integrations/ml-callback" element={<MlCallback />} />
     </Routes>
   )
 }

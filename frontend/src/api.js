@@ -84,4 +84,6 @@ export const getBrandingSettings = () =>
 export const updateBrandingSettings = (data) => request('PUT', '/api/settings/branding', data)
 export const getIntegrationSettings = () => request('GET', '/api/settings/integrations')
 export const updateIntegrationSettings = (data) => request('PUT', '/api/settings/integrations', data)
-export const testMlCredentials = () => request('POST', '/api/settings/integrations/test-ml')
+export const getMlAuthUrl = () => request('GET', '/api/settings/integrations/ml-auth-url')
+export const exchangeMlCode = (code) => request('POST', '/api/settings/integrations/ml-exchange', { code })
+export const disconnectMl = () => request('DELETE', '/api/settings/integrations/ml-disconnect')

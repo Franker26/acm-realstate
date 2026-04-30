@@ -4,10 +4,11 @@ import {
   changePassword,
   createUser,
   deleteUser,
+  disconnectMl,
   getBrandingSettings,
   getIntegrationSettings,
+  getMlAuthUrl,
   listUsers,
-  testMlCredentials,
   updateBrandingSettings,
   updateIntegrationSettings,
   updateUser,
@@ -419,23 +420,31 @@ function ThemeTab() {
 
 function IntegrationsTab() {
   const [settings, setSettings] = useState({
-    scraper_service_url: '', scraper_service_token: '', ml_app_id: '', ml_app_secret: '',
+    scraper_service_url: '', scraper_service_token: '',
+    ml_app_id: '', ml_app_secret: '',
+    ml_connected: false, ml_user_nickname: null,
   })
-  const [saving, setSaving] = useState(null)   // 'zonaprop' | 'ml'
-  const [testing, setTesting] = useState(null) // 'zonaprop' | 'ml'
+  const [saving, setSaving] = useState(null)
+  const [testing, setTesting] = useState(null)
+  const [connecting, setConnecting] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
   const [msgs, setMsgs] = useState({})
   const [errors, setErrors] = useState({})
 
-  useEffect(() => {
+  function loadSettings() {
     getIntegrationSettings()
       .then((d) => setSettings({
         scraper_service_url: d.scraper_service_url || '',
-        scraper_service_token: d.scraper_service_token === '***' ? '' : (d.scraper_service_token || ''),
+        scraper_service_token: d.scraper_service_token === '***' ? '***' : (d.scraper_service_token || ''),
         ml_app_id: d.ml_app_id || '',
-        ml_app_secret: d.ml_app_secret === '***' ? '' : (d.ml_app_secret || ''),
+        ml_app_secret: d.ml_app_secret === '***' ? '***' : (d.ml_app_secret || ''),
+        ml_connected: d.ml_connected || false,
+        ml_user_nickname: d.ml_user_nickname || null,
       }))
       .catch(() => {})
-  }, [])
+  }
+
+  useEffect(() => { loadSettings() }, [])
 
   function set(key, val) { setSettings((p) => ({ ...p, [key]: val })) }
   function msg(section, text) { setMsgs((p) => ({ ...p, [section]: text })) }
@@ -446,7 +455,7 @@ function IntegrationsTab() {
     try {
       await updateIntegrationSettings({
         scraper_service_url: settings.scraper_service_url.trim() || null,
-        scraper_service_token: settings.scraper_service_token.trim() || null,
+        scraper_service_token: settings.scraper_service_token === '***' ? '***' : (settings.scraper_service_token.trim() || null),
       })
       msg('zonaprop', 'Guardado.')
     } catch (e) { err('zonaprop', e.message) } finally { setSaving(null) }
@@ -464,23 +473,36 @@ function IntegrationsTab() {
     finally { setTesting(null) }
   }
 
-  async function saveMl() {
+  async function saveMlCredentials() {
     setSaving('ml'); msg('ml', null); err('ml', null)
     try {
       await updateIntegrationSettings({
         ml_app_id: settings.ml_app_id.trim() || null,
-        ml_app_secret: settings.ml_app_secret.trim() || null,
+        ml_app_secret: settings.ml_app_secret === '***' ? '***' : (settings.ml_app_secret.trim() || null),
       })
-      msg('ml', 'Guardado.')
+      msg('ml', 'Credenciales guardadas.')
     } catch (e) { err('ml', e.message) } finally { setSaving(null) }
   }
 
-  async function testMl() {
-    setTesting('ml'); msg('ml', null); err('ml', null)
+  async function handleConnect() {
+    setConnecting(true); err('ml', null)
     try {
-      await testMlCredentials()
-      msg('ml', '✓ Credenciales válidas — token obtenido correctamente.')
-    } catch (e) { err('ml', e.message) } finally { setTesting(null) }
+      const { url } = await getMlAuthUrl()
+      window.location.href = url
+    } catch (e) {
+      err('ml', e.message)
+      setConnecting(false)
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!window.confirm('¿Desconectar la cuenta de MercadoLibre?')) return
+    setDisconnecting(true); err('ml', null)
+    try {
+      await disconnectMl()
+      loadSettings()
+    } catch (e) { err('ml', e.message) }
+    finally { setDisconnecting(false) }
   }
 
   return (
@@ -507,7 +529,7 @@ function IntegrationsTab() {
         <input
           type="password"
           placeholder="Bearer token del servicio"
-          value={settings.scraper_service_token}
+          value={settings.scraper_service_token === '***' ? '' : settings.scraper_service_token}
           onChange={(e) => set('scraper_service_token', e.target.value)}
         />
         <div className="settings-actions-row" style={{ marginTop: 16 }}>
@@ -525,11 +547,13 @@ function IntegrationsTab() {
         <div className="settings-section-header">
           <div>
             <h2>MercadoLibre Inmuebles</h2>
-            <p>API oficial. Registrá una app en developers.mercadolibre.com.ar y pegá las credenciales.</p>
+            <p>Conectá la cuenta de la inmobiliaria para extraer datos de publicaciones automáticamente.</p>
           </div>
         </div>
         {errors.ml && <div className="alert alert-error">{errors.ml}</div>}
         {msgs.ml && <div className="alert alert-success">{msgs.ml}</div>}
+
+        {/* Credentials (App ID + Secret) — always visible */}
         <label style={{ fontSize: 13, color: '#555', display: 'block', marginBottom: 4 }}>App ID</label>
         <input
           type="text"
@@ -541,17 +565,45 @@ function IntegrationsTab() {
         <input
           type="password"
           placeholder="••••••••••••••••"
-          value={settings.ml_app_secret}
+          value={settings.ml_app_secret === '***' ? '' : settings.ml_app_secret}
           onChange={(e) => set('ml_app_secret', e.target.value)}
         />
-        <div className="settings-actions-row" style={{ marginTop: 16 }}>
-          <button className="btn btn-primary" onClick={saveMl} disabled={saving === 'ml'}>
-            {saving === 'ml' && <span className="spinner" />} Guardar
+        <div className="settings-actions-row" style={{ marginTop: 12 }}>
+          <button className="btn btn-secondary btn-sm" onClick={saveMlCredentials} disabled={saving === 'ml'}>
+            {saving === 'ml' && <span className="spinner" />} Guardar credenciales
           </button>
-          <button className="btn btn-secondary" onClick={testMl}
-            disabled={testing === 'ml' || !settings.ml_app_id.trim() || !settings.ml_app_secret.trim()}>
-            {testing === 'ml' && <span className="spinner" />} Testear credenciales
-          </button>
+        </div>
+
+        {/* OAuth connection status */}
+        <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #eee' }}>
+          {settings.ml_connected ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{
+                  width: 10, height: 10, borderRadius: '50%', background: '#16a34a',
+                  display: 'inline-block', flexShrink: 0,
+                }} />
+                <span style={{ fontSize: 14, color: '#111' }}>
+                  Conectado
+                  {settings.ml_user_nickname && <strong> · {settings.ml_user_nickname}</strong>}
+                </span>
+              </div>
+              <button className="btn btn-danger btn-sm" onClick={handleDisconnect} disabled={disconnecting}>
+                {disconnecting && <span className="spinner" />} Desconectar
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <span style={{ fontSize: 14, color: '#666' }}>No conectado</span>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleConnect}
+                disabled={connecting || !settings.ml_app_id.trim()}
+              >
+                {connecting && <span className="spinner" />} Conectar con MercadoLibre
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

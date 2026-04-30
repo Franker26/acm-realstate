@@ -342,42 +342,58 @@ class IntegrationSettings(PydanticBase):
     scraper_service_token: Optional[str] = None
     ml_app_id: Optional[str] = None
     ml_app_secret: Optional[str] = None
+    ml_connected: bool = False
+    ml_user_nickname: Optional[str] = None
 
 
 _INTEGRATION_KEYS = ["scraper_service_url", "scraper_service_token", "ml_app_id", "ml_app_secret"]
-
-
-def _get_integration_settings(db: Session) -> IntegrationSettings:
-    payload = {}
-    for key in _INTEGRATION_KEYS:
-        s = db.query(AppSetting).filter(AppSetting.key == key).first()
-        env_fallback = {"scraper_service_url": _SCRAPER_SERVICE_URL, "scraper_service_token": _SCRAPER_SERVICE_TOKEN}
-        payload[key] = (s.value if s and s.value else None) or env_fallback.get(key)
-    return IntegrationSettings(**payload)
+_ML_TOKEN_KEYS = ["ml_access_token", "ml_refresh_token", "ml_token_expires_at", "ml_user_nickname"]
+_ML_REDIRECT_URI = os.getenv(
+    "ML_REDIRECT_URI",
+    "https://reval-app.vercel.app/api/settings/integrations/ml-callback",
+)
 
 
 def _get_integration_settings_dict(db: Session) -> dict:
-    return _get_integration_settings(db).model_dump()
+    env_fallback = {"scraper_service_url": _SCRAPER_SERVICE_URL, "scraper_service_token": _SCRAPER_SERVICE_TOKEN}
+    payload = {}
+    for key in _INTEGRATION_KEYS + _ML_TOKEN_KEYS:
+        s = db.query(AppSetting).filter(AppSetting.key == key).first()
+        payload[key] = (s.value if s and s.value else None) or env_fallback.get(key)
+    return payload
+
+
+def _save_setting(db: Session, key: str, value: str) -> None:
+    s = db.query(AppSetting).filter(AppSetting.key == key).first()
+    if not s:
+        s = AppSetting(key=key)
+        db.add(s)
+    s.value = value
+    db.commit()
 
 
 @app.get("/api/settings/integrations", response_model=IntegrationSettings)
 def get_integration_settings(request: Request, db: Session = Depends(get_db)):
     _require_admin(request, db)
-    s = _get_integration_settings(db)
-    # Mask secrets in response
-    if s.ml_app_secret:
-        s.ml_app_secret = "***"
-    if s.scraper_service_token:
-        s.scraper_service_token = "***"
-    return s
+    raw = _get_integration_settings_dict(db)
+    return IntegrationSettings(
+        scraper_service_url=raw.get("scraper_service_url"),
+        scraper_service_token="***" if raw.get("scraper_service_token") else None,
+        ml_app_id=raw.get("ml_app_id"),
+        ml_app_secret="***" if raw.get("ml_app_secret") else None,
+        ml_connected=bool(raw.get("ml_access_token")),
+        ml_user_nickname=raw.get("ml_user_nickname") or None,
+    )
 
 
 @app.put("/api/settings/integrations", response_model=IntegrationSettings)
 def update_integration_settings(body: IntegrationSettings, request: Request, db: Session = Depends(get_db)):
     _require_admin(request, db)
     for key, value in body.model_dump().items():
+        if key in ("ml_connected", "ml_user_nickname"):
+            continue  # read-only, managed by OAuth flow
         if value == "***":
-            continue  # skip masked fields — don't overwrite with placeholder
+            continue  # skip masked fields
         s = db.query(AppSetting).filter(AppSetting.key == key).first()
         if not s:
             s = AppSetting(key=key)
@@ -387,22 +403,84 @@ def update_integration_settings(body: IntegrationSettings, request: Request, db:
     return get_integration_settings(request, db)
 
 
-@app.post("/api/settings/integrations/test-ml")
-async def test_ml_credentials(request: Request, db: Session = Depends(get_db)):
+@app.get("/api/settings/integrations/ml-auth-url")
+def ml_auth_url(request: Request, db: Session = Depends(get_db)):
+    import urllib.parse
     _require_admin(request, db)
-    from integrations.mercadolibre import _get_token
-    settings = _get_integration_settings_dict(db)
-    app_id = settings.get("ml_app_id")
-    secret = settings.get("ml_app_secret")
+    raw = _get_integration_settings_dict(db)
+    app_id = raw.get("ml_app_id")
+    if not app_id:
+        raise HTTPException(400, "Configurá el App ID de MercadoLibre primero.")
+    url = (
+        "https://auth.mercadolibre.com.ar/authorization"
+        f"?response_type=code"
+        f"&client_id={app_id}"
+        f"&redirect_uri={urllib.parse.quote(_ML_REDIRECT_URI, safe='')}"
+    )
+    return {"url": url}
+
+
+class MlExchangeRequest(PydanticBase):
+    code: str
+
+
+@app.post("/api/settings/integrations/ml-exchange")
+async def ml_exchange_code(body: MlExchangeRequest, request: Request, db: Session = Depends(get_db)):
+    import time as _time
+    _require_admin(request, db)
+    raw = _get_integration_settings_dict(db)
+    app_id = raw.get("ml_app_id")
+    secret = raw.get("ml_app_secret")
     if not app_id or not secret:
-        raise HTTPException(400, "Credenciales de MercadoLibre no configuradas.")
-    try:
-        await _get_token(app_id, secret)
-        return {"status": "ok"}
-    except HTTPException as e:
-        raise
-    except Exception as e:
-        raise HTTPException(502, str(e))
+        raise HTTPException(400, "Configurá App ID y Secret de MercadoLibre primero.")
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(
+            "https://api.mercadolibre.com/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": app_id,
+                "client_secret": secret,
+                "code": body.code,
+                "redirect_uri": _ML_REDIRECT_URI,
+            },
+        )
+    if r.status_code != 200:
+        raise HTTPException(502, f"Error intercambiando código con MercadoLibre: {r.text}")
+
+    data = r.json()
+    access_token = data["access_token"]
+    refresh_token_val = data.get("refresh_token", "")
+    expires_at = str(_time.time() + data.get("expires_in", 21600))
+    user_id = str(data.get("user_id", ""))
+
+    nickname = user_id
+    if user_id:
+        async with httpx.AsyncClient(timeout=10) as client:
+            ru = await client.get(
+                f"https://api.mercadolibre.com/users/{user_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if ru.status_code == 200:
+                nickname = ru.json().get("nickname", user_id)
+
+    for key, value in [
+        ("ml_access_token", access_token),
+        ("ml_refresh_token", refresh_token_val),
+        ("ml_token_expires_at", expires_at),
+        ("ml_user_nickname", nickname),
+    ]:
+        _save_setting(db, key, value)
+
+    return {"status": "connected", "nickname": nickname}
+
+
+@app.delete("/api/settings/integrations/ml-disconnect")
+def ml_disconnect(request: Request, db: Session = Depends(get_db)):
+    _require_admin(request, db)
+    for key in ["ml_access_token", "ml_refresh_token", "ml_token_expires_at", "ml_user_nickname"]:
+        _save_setting(db, key, "")
+    return {"status": "disconnected"}
 
 
 def _parse_steps(raw: str | None) -> list[str]:
@@ -810,6 +888,7 @@ class ExtractRequest(PydanticBase):
 async def extract_property(body: ExtractRequest, db: Session = Depends(get_db)):
     from integrations import extract as integration_extract
     settings = _get_integration_settings_dict(db)
+    settings["_save_setting"] = lambda key, value: _save_setting(db, key, value)
     return await integration_extract(body.url.strip(), settings)
 
 
