@@ -2815,6 +2815,82 @@ body::before {
   border-radius: 22px;
 }
 
+.approvals-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.approvals-detail__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.approvals-detail__address {
+  color: #666;
+  margin-top: 4px;
+}
+
+.approvals-detail__meta {
+  color: #888;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.approvals-comments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.approvals-comments-header__title {
+  margin: 0;
+  color: var(--primary);
+}
+
+.approvals-actions {
+  justify-content: space-between;
+}
+
+.approvals-actions__group {
+  display: flex;
+  gap: 8px;
+}
+
+.pdf-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.pdf-summary-card {
+  min-width: 0;
+}
+
+.pdf-summary-card__label {
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+}
+
+.pdf-summary-card__value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a3a5c;
+}
+
+.pdf-summary-card__value span {
+  font-size: 12px;
+}
+
+.pdf-summary-card__text {
+  font-size: 14px;
+  color: #333;
+}
+
 .login-brand-panel,
 .login-form-panel {
   background: #fff;
@@ -2841,12 +2917,621 @@ body::before {
   }
 
   .inline-control-row,
-  .btn-group--workspace {
+  .btn-group--workspace,
+  .settings-actions-row,
+  .settings-color-row,
+  .settings-inline-fields,
+  .settings-toggle-row,
+  .settings-switch-row,
+  .approvals-actions,
+  .approvals-actions__group,
+  .btn-group,
+  .approvals-comments-header {
     flex-direction: column;
     align-items: stretch;
   }
 
   .btn-group__hint {
     order: 2;
+  }
+
+  .app-header {
+    padding: 12px 12px 0;
+  }
+
+  .app-header__shell {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .app-title,
+  .app-header__right,
+  .header-user,
+  .header-logout {
+    width: 100%;
+  }
+
+  .app-header__right {
+    margin-left: 0;
+    gap: 10px;
+  }
+
+  .header-user {
+    justify-content: space-between;
+  }
+
+  .header-logout {
+    min-height: 42px;
+  }
+
+  .wizard-nav {
+    padding: 8px;
+    gap: 8px;
+    margin-bottom: 18px;
+    scroll-snap-type: x proximity;
+  }
+
+  .wizard-step {
+    min-width: 110px;
+    padding: 10px 12px;
+    scroll-snap-align: start;
+  }
+
+  .home-kanban-hero,
+  .step-header,
+  .workflow-card,
+  .settings-surface,
+  .card,
+  .login-card,
+  .login-brand-panel,
+  .login-form-panel {
+    padding: 18px;
+  }
+
+  .kanban-column {
+    min-height: 0;
+  }
+
+  .kanban-card {
+    padding: 14px;
+  }
+
+  .kanban-card__meta {
+    gap: 8px;
+  }
+
+  .kanban-card__status {
+    min-height: 28px;
+    font-size: 10px;
+    padding: 0 8px;
+  }
+
+  .approval-comment-row,
+  .pdf-summary-grid,
+  .results-kpi-grid,
+  .dashboard-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-password-row input,
+  .settings-inline-fields input {
+    width: 100%;
+  }
+
+  .price-chart-shell {
+    height: 240px;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-main {
+    padding: 16px 10px 28px;
+  }
+
+  .app-title__name {
+    font-size: 15px;
+  }
+
+  .home-kanban-hero h1,
+  .step-header h1,
+  .login-brand-panel h1 {
+    font-size: 28px;
+  }
+
+  .home-kanban-hero,
+  .step-header,
+  .workflow-card,
+  .settings-surface,
+  .card,
+  .login-card,
+  .login-brand-panel,
+  .login-form-panel {
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .header-nav {
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .header-link {
+    flex: 0 0 auto;
+  }
+
+  .kanban-card__top {
+    flex-direction: column;
+  }
+
+  .kanban-card__top-actions,
+  .kanban-card__meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .kanban-card__meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .kpi-hero-value,
+  .kpi-value,
+  .pdf-summary-card__value {
+    font-size: 22px;
+  }
+
+  .price-chart-shell {
+    height: 220px;
+  }
+}
+
+.header-menu-toggle {
+  display: none;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid #dbe3ee;
+  border-radius: 14px;
+  background: #fff;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.header-menu-toggle span {
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: #334155;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.header-menu-toggle.is-open span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.header-menu-toggle.is-open span:nth-child(2) {
+  opacity: 0;
+}
+
+.header-menu-toggle.is-open span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+.table-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.workspace-table__cell-ellipsis {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkbox-row__label {
+  white-space: nowrap;
+}
+
+.comparable-adjustment-card {
+  margin-bottom: 16px;
+}
+
+.comparable-adjustment-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.comparable-adjustment-card__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1a3a5c;
+}
+
+.comparable-adjustment-card__meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #888;
+}
+
+.comparable-adjustment-card__totals {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.comparable-adjustment-card__badge {
+  margin-bottom: 3px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.comparable-adjustment-card__value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a3a5c;
+}
+
+.ponderadores-accent {
+  font-weight: 600;
+}
+
+.ponderadores-accent--warm {
+  color: #e65100;
+}
+
+.ponderadores-accent--cool {
+  color: #1565c0;
+}
+
+.alert-info--compact {
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.approvals-comments-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pdf-approval-comments {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pdf-summary-note {
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #555;
+}
+
+@media (max-width: 820px) {
+  .app-header {
+    padding: 12px 12px 0;
+  }
+
+  .app-header__shell {
+    position: relative;
+    align-items: center;
+    padding: 12px;
+    border-radius: 20px;
+  }
+
+  .app-header__left {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .app-title {
+    min-width: 0;
+    gap: 12px;
+  }
+
+  .app-title > span:last-child {
+    min-width: 0;
+  }
+
+  .app-title__name,
+  .app-title__meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header-menu-toggle {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+
+  .app-header__right {
+    display: none;
+    width: 100%;
+    margin-left: 0;
+    padding-top: 4px;
+  }
+
+  .app-header__right.is-open {
+    display: grid;
+    gap: 10px;
+  }
+
+  .header-nav {
+    width: 100%;
+    padding: 6px;
+    border-radius: 16px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .header-link {
+    width: 100%;
+    justify-content: flex-start;
+    padding-inline: 14px;
+  }
+
+  .header-user {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .header-logout {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .login-layout {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+
+  .login-form-panel {
+    order: -1;
+  }
+
+  .login-brand-panel {
+    padding-top: 24px;
+  }
+
+  .login-brand-panel__hero {
+    margin-bottom: 0;
+  }
+
+  .login-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .login-preview {
+    display: none;
+  }
+
+  .login-flow {
+    gap: 10px;
+  }
+
+  .home-kanban-hero,
+  .step-header {
+    padding: 22px 18px;
+  }
+
+  .home-kanban-hero {
+    display: grid;
+    gap: 16px;
+  }
+
+  .home-kanban-hero__actions {
+    align-items: stretch;
+  }
+
+  .home-kanban-hero__hint {
+    max-width: none;
+    text-align: left;
+  }
+
+  .home-kanban-hero__actions .btn {
+    width: 100%;
+  }
+
+  .dashboard-metrics,
+  .kpi-grid,
+  .results-kpi-grid,
+  .pdf-summary-grid,
+  .approval-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-card,
+  .settings-surface,
+  .card,
+  .login-card,
+  .login-brand-panel,
+  .login-form-panel,
+  .kanban-column {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .form-grid,
+  .tipo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .checkbox-row,
+  .btn-group,
+  .btn-group--workspace,
+  .inline-control-row,
+  .workflow-toolbar,
+  .workflow-toolbar__group,
+  .settings-actions-row,
+  .settings-color-row,
+  .settings-inline-fields,
+  .settings-toggle-row,
+  .settings-switch-row,
+  .approvals-actions,
+  .approvals-actions__group,
+  .approvals-comments-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn-group .btn,
+  .inline-control-row .btn,
+  .workflow-toolbar__group .btn,
+  .table-actions .btn,
+  .approvals-actions .btn,
+  .approvals-actions__group .btn {
+    width: 100%;
+  }
+
+  .table-wrapper {
+    margin-inline: -4px;
+  }
+
+  .workspace-table {
+    min-width: 640px;
+  }
+
+  .approvals-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .approvals-list__item {
+    padding: 14px;
+  }
+
+  .approval-comment-row {
+    grid-template-columns: 1fr;
+  }
+
+  .approvals-detail__meta {
+    line-height: 1.5;
+  }
+
+  .kpi-hero-row {
+    flex-direction: column;
+  }
+
+  .kpi-confidence {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .factor-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .factor-row-label,
+  .factor-row-pct,
+  .factor-row-val {
+    text-align: left;
+    white-space: normal;
+  }
+
+  .comparable-adjustment-card__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .comparable-adjustment-card__totals {
+    text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-main {
+    padding: 16px 10px 28px;
+  }
+
+  .app-title__mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .app-title__name {
+    font-size: 15px;
+  }
+
+  .app-title__meta {
+    font-size: 11px;
+  }
+
+  .home-kanban-hero h1,
+  .step-header h1,
+  .login-brand-panel h1,
+  .login-card__header h2 {
+    font-size: 28px;
+    line-height: 1.05;
+  }
+
+  .step-header p,
+  .home-kanban-hero p,
+  .login-brand-panel p,
+  .login-card__header p {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .login-brand-panel {
+    gap: 16px;
+  }
+
+  .login-flow__item {
+    align-items: flex-start;
+  }
+
+  .kanban-board {
+    grid-template-columns: 1fr;
+  }
+
+  .kanban-card__top,
+  .kanban-card__meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .kanban-card__top-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .kanban-card__owner {
+    min-width: 0;
+  }
+
+  .kanban-card__owner span {
+    overflow-wrap: anywhere;
+  }
+
+  .tipo-badge-selected {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tipo-badge-change {
+    margin-left: 0;
+  }
+
+  .checkbox-row__label {
+    white-space: normal;
+  }
+
+  .workspace-table__cell-ellipsis {
+    max-width: 150px;
+  }
+
+  .price-chart-shell {
+    height: 220px;
   }
 }

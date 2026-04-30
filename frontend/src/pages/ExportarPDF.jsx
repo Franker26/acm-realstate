@@ -230,7 +230,7 @@ export default function ExportarPDF() {
             <div className="alert alert-error">
               Esta tasación requiere aprobación antes de exportar.
               {acm?.approval_comments?.length > 0 && (
-                <div style={{ marginTop: 8 }}>
+                <div className="pdf-approval-comments">
                   {acm.approval_comments.map((comment) => (
                     <div key={comment.id}>
                       <strong>{comment.section}:</strong> {comment.message}
@@ -240,24 +240,24 @@ export default function ExportarPDF() {
               )}
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
-            <div>
-              <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase' }}>Promedio ajustado</div>
-              <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1a3a5c' }}>{fmt(resultado.mean_ajustado)}<span style={{ fontSize: 12 }}>/m²</span></div>
+          <div className="pdf-summary-grid">
+            <div className="pdf-summary-card">
+              <div className="pdf-summary-card__label">Promedio ajustado</div>
+              <div className="pdf-summary-card__value">{fmt(resultado.mean_ajustado)}<span>/m²</span></div>
             </div>
-            <div>
-              <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase' }}>Rango</div>
-              <div style={{ fontSize: 14, color: '#333' }}>
+            <div className="pdf-summary-card">
+              <div className="pdf-summary-card__label">Rango</div>
+              <div className="pdf-summary-card__text">
                 {fmt(resultado.min_ajustado)} — {fmt(resultado.max_ajustado)}
               </div>
             </div>
-            <div>
-              <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase' }}>Valor estimado sujeto</div>
-              <div style={{ fontSize: 20, fontWeight: 'bold', color: '#1a3a5c' }}>{fmt(resultado.valor_estimado_sujeto)}</div>
+            <div className="pdf-summary-card">
+              <div className="pdf-summary-card__label">Valor estimado sujeto</div>
+              <div className="pdf-summary-card__value">{fmt(resultado.valor_estimado_sujeto)}</div>
             </div>
           </div>
 
-          <p style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>
+          <p className="pdf-summary-note">
             El PDF incluye la ficha de la propiedad sujeto, la tabla de comparables con sus ponderadores,
             los KPIs de la tasación y el gráfico de precios ajustados.
           </p>

@@ -131,11 +131,11 @@ export default function Approvals() {
             {!detailLoading && !selected && <p style={{ color: '#777' }}>Seleccioná una tasación para revisar.</p>}
 
             {!detailLoading && selected && (
-              <div style={{ display: 'grid', gap: 18 }}>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--primary)' }}>{selected.nombre}</div>
-                  <div style={{ color: '#666', marginTop: 4 }}>{selected.direccion}</div>
-                  <div style={{ color: '#888', fontSize: 12, marginTop: 6 }}>
+              <div className="approvals-detail">
+                <div className="approvals-detail__hero">
+                  <div className="approvals-detail__title">{selected.nombre}</div>
+                  <div className="approvals-detail__address">{selected.direccion}</div>
+                  <div className="approvals-detail__meta">
                     {selected.owner_username} · {selected.comparables.length} comparables · etapa {selected.stage}
                   </div>
                 </div>
@@ -152,8 +152,8 @@ export default function Approvals() {
                 </div>
 
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                    <h3 style={{ margin: 0, color: 'var(--primary)' }}>Observaciones</h3>
+                  <div className="approvals-comments-header">
+                    <h3 className="approvals-comments-header__title">Observaciones</h3>
                     <button
                       className="btn btn-secondary btn-sm"
                       type="button"
@@ -163,7 +163,7 @@ export default function Approvals() {
                     </button>
                   </div>
 
-                  <div style={{ display: 'grid', gap: 10 }}>
+                  <div className="approvals-comments-list">
                     {comments.map((comment, index) => (
                       <div key={`${comment.section}-${index}`} className="approval-comment-row">
                         <select
@@ -196,14 +196,14 @@ export default function Approvals() {
                   </div>
                 </div>
 
-                <div className="btn-group" style={{ justifyContent: 'space-between' }}>
+                <div className="btn-group approvals-actions">
                   <button className="btn btn-secondary" onClick={() => {
                     dispatch({ type: 'SET_ACM_ID', payload: selected.id })
                     navigate(`/acm/${selected.id}/step/4`)
                   }}>
                     Abrir resultados
                   </button>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div className="approvals-actions__group">
                     <button className="btn btn-secondary" onClick={() => handleReview('Cambios solicitados')} disabled={saving}>
                       Solicitar cambios
                     </button>
