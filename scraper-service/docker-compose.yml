@@ -1,0 +1,8 @@
+services:
+  zonaprop-scraper:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+    environment:
+      - SERVICE_TOKEN=${SERVICE_TOKEN:-}

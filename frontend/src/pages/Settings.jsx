@@ -5,8 +5,10 @@ import {
   createUser,
   deleteUser,
   getBrandingSettings,
+  getScraperSettings,
   listUsers,
   updateBrandingSettings,
+  updateScraperSettings,
   updateUser,
 } from '../api.js'
 import {
@@ -382,6 +384,73 @@ function ThemeTab() {
   )
 }
 
+function ScraperTab() {
+  const [url, setUrl] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [message, setMessage] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    getScraperSettings()
+      .then((d) => setUrl(d.scraper_service_url || ''))
+      .catch((e) => setError(e.message))
+  }, [])
+
+  async function handleSave() {
+    setSaving(true); setMessage(null); setError(null)
+    try {
+      await updateScraperSettings({ scraper_service_url: url.trim() || null })
+      setMessage('URL guardada.')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleTest() {
+    if (!url.trim()) return
+    setTesting(true); setMessage(null); setError(null)
+    try {
+      const res = await fetch(`${url.trim()}/health`)
+      if (res.ok) setMessage('✓ Microservicio responde correctamente.')
+      else setError(`El servicio respondió con status ${res.status}.`)
+    } catch (e) {
+      setError('No se pudo conectar. Verificá que el túnel esté activo.')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 560 }}>
+      <h3 style={{ marginBottom: 8, color: 'var(--primary)' }}>Microservicio de extracción</h3>
+      <p style={{ fontSize: 14, color: '#555', marginBottom: 20 }}>
+        URL del scraper local (atlas). Usada para extraer datos de Zonaprop desde una IP residencial.
+        Dejá vacío para usar el fetch directo (solo funciona en desarrollo local).
+      </p>
+      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
+      {message && <div className="alert alert-success" style={{ marginBottom: 12 }}>{message}</div>}
+      <input
+        type="url"
+        placeholder="https://xxx.trycloudflare.com"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        style={{ width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: 5, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }}
+      />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {saving && <span className="spinner" />} Guardar
+        </button>
+        <button className="btn btn-secondary" onClick={handleTest} disabled={testing || !url.trim()}>
+          {testing && <span className="spinner" />} Testear conexión
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const OSM_KEY = 'acm_osm_enabled'
 
 function MapTab() {
@@ -455,6 +524,14 @@ export default function Settings() {
             Personalización
           </button>
         )}
+        {user?.is_admin && (
+          <button
+            className={`btn btn-sm ${tab === 'scraper' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setTab('scraper')}
+          >
+            Scraper
+          </button>
+        )}
       </div>
 
       {tab === 'usuarios' && user?.is_admin && (
@@ -462,6 +539,7 @@ export default function Settings() {
       )}
       {tab === 'mapa' && <MapTab />}
       {tab === 'tema' && user?.is_admin && <ThemeTab />}
+      {tab === 'scraper' && user?.is_admin && <ScraperTab />}
     </div>
   )
 }
