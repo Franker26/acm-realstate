@@ -63,6 +63,7 @@ export default function ResultadosDashboard() {
     <div>
       <WizardNav currentStep={4} />
       <div className="step-header">
+        <span className="page-eyebrow">Paso 4</span>
         <h1>Resultados</h1>
         <p>
           Estimación basada en <strong>{comparables.length} comparable{comparables.length !== 1 ? 's' : ''}</strong> ajustada{comparables.length !== 1 ? 's' : ''}.
@@ -91,7 +92,7 @@ export default function ResultadosDashboard() {
       </div>
 
       {/* KPI grid */}
-      <div className="kpi-grid">
+      <div className="kpi-grid results-kpi-grid">
         <KPICard
           label="Promedio ajustado"
           value={fmtM2(mean_ajustado)}
@@ -128,10 +129,15 @@ export default function ResultadosDashboard() {
       </div>
 
       {/* Tabla comparables */}
-      <div className="card">
-        <h2>Detalle de comparables</h2>
+      <div className="card workflow-card">
+        <div className="section-heading">
+          <div>
+            <span className="section-heading__eyebrow">Detalle</span>
+            <h2>Comparables ajustadas</h2>
+          </div>
+        </div>
         <div className="table-wrapper">
-          <table>
+          <table className="workspace-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -166,8 +172,13 @@ export default function ResultadosDashboard() {
         </div>
       </div>
 
-      <div className="card">
-        <h2>Gráfico de precios ajustados</h2>
+      <div className="card workflow-card">
+        <div className="section-heading">
+          <div>
+            <span className="section-heading__eyebrow">Distribución</span>
+            <h2>Gráfico de precios ajustados</h2>
+          </div>
+        </div>
         <PriceChart ref={chartRef} comparables={comparables} mean={mean_ajustado} />
       </div>
 

@@ -196,6 +196,7 @@ export default function AgregarComparables() {
       <SmartLoader loading={extracting} logoSrc={logoSrc} />
       <WizardNav currentStep={2} />
       <div className="step-header">
+        <span className="page-eyebrow">Paso 2</span>
         <h1>Agregar Comparables</h1>
         <p>Cargá las propiedades comparables extraídas de ZonaProp, Argenprop, etc.</p>
       </div>
@@ -203,10 +204,15 @@ export default function AgregarComparables() {
       {apiError && <div className="alert alert-error">{apiError}</div>}
 
       {comparables.length > 0 && (
-        <div className="card">
-          <h2>Comparables cargadas ({comparables.length})</h2>
+        <div className="card workflow-card">
+          <div className="section-heading">
+            <div>
+              <span className="section-heading__eyebrow">Base cargada</span>
+              <h2>Comparables activas ({comparables.length})</h2>
+            </div>
+          </div>
           <div className="table-wrapper">
-            <table>
+            <table className="workspace-table">
               <thead>
                 <tr>
                   <th>#</th>
@@ -246,15 +252,19 @@ export default function AgregarComparables() {
       )}
 
       {showForm ? (
-        <div className="card">
-          <h2>{editId ? 'Editar comparable' : 'Nueva comparable'}</h2>
+        <div className="card workflow-card">
+          <div className="section-heading">
+            <div>
+              <span className="section-heading__eyebrow">{editId ? 'Edición' : 'Carga manual'}</span>
+              <h2>{editId ? 'Editar comparable' : 'Nueva comparable'}</h2>
+            </div>
+          </div>
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group full">
                 <label>URL de publicación</label>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div className="inline-control-row">
                   <input type="url" name="url" value={form.url} tabIndex={1}
-                    style={{ flex: 1 }}
                     onChange={(e) => { handleChange('url', e.target.value); setExtractError(null) }}
                     placeholder="https://www.zonaprop.com.ar/..." />
                   {form.url.includes('zonaprop.com.ar') && (
@@ -263,9 +273,8 @@ export default function AgregarComparables() {
                       className="btn btn-secondary btn-sm"
                       onClick={handleExtract}
                       disabled={extracting}
-                      style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
                     >
-                      {extracting ? 'Extrayendo...' : '⬇ Extraer datos'}
+                      {extracting ? 'Extrayendo...' : 'Extraer datos'}
                     </button>
                   )}
                 </div>
@@ -304,7 +313,7 @@ export default function AgregarComparables() {
               </div>
             </div>
 
-            <div style={{ marginTop: 18 }}>
+            <div className="workflow-section-spacer">
               <PropertyForm values={form} onChange={handleChange} errors={errors} />
             </div>
 
@@ -318,7 +327,7 @@ export default function AgregarComparables() {
           </form>
         </div>
       ) : (
-        <div style={{ marginBottom: 20 }}>
+        <div className="workflow-inline-action">
           <button className="btn btn-secondary" onClick={() => { setShowForm(true); setEditId(null); setForm(EMPTY_COMP) }}>
             + Agregar otra comparable
           </button>

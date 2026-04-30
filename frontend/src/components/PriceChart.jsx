@@ -69,12 +69,11 @@ const PriceChart = forwardRef(function PriceChart({ comparables, mean }, ref) {
 
   return (
     <>
-      {/* El div con altura fija es el padre directo del canvas — Chart.js lo necesita así */}
-      <div style={{ height: 280, position: 'relative' }}>
+      <div className="price-chart-shell">
         <Bar ref={chartRef} data={data} options={options} />
       </div>
       {meanRound && (
-        <div style={{ textAlign: 'center', fontSize: 12, color: '#e53935', fontWeight: 600, marginTop: 6 }}>
+        <div className="price-chart-mean">
           — Promedio: USD {meanRound.toLocaleString('es-AR')}/m²
         </div>
       )}
