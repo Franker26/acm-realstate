@@ -21,6 +21,7 @@ import MlCallback from './pages/MlCallback.jsx'
 import AdminLogin from './pages/admin/AdminLogin.jsx'
 import AdminDashboard from './pages/admin/AdminDashboard.jsx'
 import AdminCompanyDetail from './pages/admin/AdminCompanyDetail.jsx'
+import NotFound from './pages/NotFound.jsx'
 import { getBrandingSettings, getCurrentUser, loginUser } from './api.js'
 
 // --- Auth ---
@@ -309,10 +310,10 @@ function AppRoutes() {
       <Route path="/approvals" element={<PrivateRoute><Approvals /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
       <Route path="/ml-callback" element={<MlCallback />} />
-      {/* Admin panel — completely separate layout */}
       <Route path="/admin" element={<AdminLogin />} />
       <Route path="/admin/companies" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       <Route path="/admin/companies/:id" element={<AdminRoute><AdminCompanyDetail /></AdminRoute>} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }

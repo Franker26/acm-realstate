@@ -4,6 +4,7 @@ import { getACM, getResultado } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 import KPICard from '../components/KPICard.jsx'
 import PriceChart from '../components/PriceChart.jsx'
+import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
 function fmtUSD(n) {
   return n != null ? `USD ${Math.round(n).toLocaleString('es-AR')}` : '—'
@@ -40,8 +41,29 @@ export default function ResultadosDashboard() {
       .finally(() => setLoading(false))
   }, [id])
 
-  if (loading) return <p style={{ padding: 24 }}>Calculando resultados...</p>
-  if (error) return <div className="alert alert-error" style={{ margin: 24 }}>{error}</div>
+  if (loading) {
+    return (
+      <LoadingState
+        eyebrow="Calculando resultados"
+        title="Estamos estimando el valor del sujeto"
+        subtitle="Ponderamos comparables, ajustamos factores y validamos el rango final."
+        messages={['Calculando...', 'Ponderando comparables...', 'Ajustando factores...', 'Validando rango...']}
+        step="Paso 4 - Resultados"
+      />
+    )
+  }
+
+  if (error) {
+    return (
+      <StateCard
+        eyebrow="No pudimos calcular el resultado"
+        title="Se produjo un error al cargar esta tasación"
+        description={error}
+        tone="error"
+        actions={<button className="btn btn-primary" onClick={() => navigate(`/acm/${id}/step/3`)}>Volver al paso 3</button>}
+      />
+    )
+  }
   if (!resultado || !acm) return null
 
   const {
