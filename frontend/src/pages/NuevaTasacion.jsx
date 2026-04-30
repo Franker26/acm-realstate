@@ -4,6 +4,7 @@ import { createACM, getACM, updateACM } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx'
 import PropertyForm from '../components/PropertyForm.jsx'
+import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
 const EMPTY = {
   nombre: '',
@@ -123,7 +124,17 @@ export default function NuevaTasacion() {
     }
   }
 
-  if (loading) return <p style={{ padding: 24 }}>Cargando...</p>
+  if (loading) {
+    return (
+      <LoadingState
+        eyebrow="Cargando sujeto"
+        title="Estamos preparando la propiedad a tasar"
+        subtitle="Recuperamos la información guardada para que puedas continuar sin perder contexto."
+        messages={['Cargando ficha...', 'Preparando workspace...', 'Sincronizando datos...']}
+        step="Paso 1 - Sujeto"
+      />
+    )
+  }
 
   return (
     <div>
@@ -134,7 +145,15 @@ export default function NuevaTasacion() {
         <p>Ingresá los datos de la propiedad a tasar (sujeto del ACM).</p>
       </div>
 
-      {apiError && <div className="alert alert-error">{apiError}</div>}
+      {apiError && (
+        <StateCard
+          eyebrow="No pudimos cargar la ficha"
+          title="Se interrumpió la carga de la tasación"
+          description={apiError}
+          tone="error"
+          mode="inline"
+        />
+      )}
 
       <form onSubmit={handleSubmit}>
         <div className="workflow-layout">

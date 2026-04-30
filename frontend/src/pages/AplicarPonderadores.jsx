@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { getACM, getResultado, updateComparable } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 import Tooltip from '../components/Tooltip.jsx'
+import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
 const BASE_FACTORS = [
   {
@@ -340,7 +341,29 @@ export default function AplicarPonderadores() {
     }
   }
 
-  if (loading) return <p style={{ padding: 24 }}>Cargando...</p>
+  if (loading) {
+    return (
+      <LoadingState
+        eyebrow="Cargando ponderadores"
+        title="Preparamos la mesa de ajustes"
+        subtitle="Traemos comparables, recomendaciones del sistema y contexto del sujeto."
+        messages={['Cargando comparables...', 'Preparando recomendaciones...', 'Abriendo mesa de ajustes...']}
+        step="Paso 3 - Ponderadores"
+      />
+    )
+  }
+
+  if (error) {
+    return (
+      <StateCard
+        eyebrow="No pudimos abrir los ponderadores"
+        title="Faltan datos para continuar con el ajuste"
+        description={error}
+        tone="error"
+        actions={<button className="btn btn-primary" onClick={() => navigate(`/acm/${id}/step/2`)}>Volver al paso 2</button>}
+      />
+    )
+  }
 
   return (
     <div>

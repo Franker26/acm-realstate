@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getACM, listPendingApprovals, reviewACM } from '../api.js'
 import { useAuth, useWizard } from '../App.jsx'
+import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
 const SECTION_OPTIONS = [
   { value: 'general', label: 'General' },
@@ -60,7 +61,15 @@ export default function Approvals() {
   }, [selectedId])
 
   if (!user?.is_approver) {
-    return <div className="alert alert-error">No tenés permisos para revisar aprobaciones.</div>
+    return (
+      <StateCard
+        eyebrow="Acceso restringido"
+        title="No tenés permisos para revisar aprobaciones"
+        description="Necesitás un perfil aprobador para entrar en esta cola de revisión."
+        tone="error"
+        actions={<button className="btn btn-primary" onClick={() => navigate('/')}>Volver al tablero</button>}
+      />
+    )
   }
 
   async function handleReview(status) {
@@ -97,17 +106,36 @@ export default function Approvals() {
         <p>Revisá tasaciones pendientes, dejá observaciones por sección y aprobá cuando estén listas.</p>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && (
+        <StateCard
+          eyebrow="No pudimos cargar la cola"
+          title="La revisión quedó interrumpida"
+          description={error}
+          tone="error"
+          mode="inline"
+        />
+      )}
       {message && <div className="alert alert-success">{message}</div>}
 
       {loading ? (
-        <p style={{ color: '#777' }}>Cargando pendientes...</p>
+        <LoadingState
+          eyebrow="Aprobaciones"
+          title="Estamos cargando las tasaciones pendientes"
+          subtitle="Armamos la cola de revisión con detalle, comentarios y estado."
+          messages={['Cargando pendientes...', 'Preparando revisión...', 'Recuperando observaciones...']}
+        />
       ) : (
         <div className="approvals-layout">
           <div className="card">
             <h2>Pendientes</h2>
             {items.length === 0 ? (
-              <p style={{ color: '#777', margin: 0 }}>No hay tasaciones pendientes de aprobación.</p>
+              <StateCard
+                eyebrow="Cola vacía"
+                title="No hay tasaciones pendientes"
+                description="Cuando el equipo envíe casos a revisión, los vas a ver listados acá."
+                tone="empty"
+                mode="inline"
+              />
             ) : (
               <div className="approvals-list">
                 {items.map((item) => (
@@ -127,8 +155,24 @@ export default function Approvals() {
 
           <div className="card">
             <h2>Detalle</h2>
-            {detailLoading && <p style={{ color: '#777' }}>Cargando tasación...</p>}
-            {!detailLoading && !selected && <p style={{ color: '#777' }}>Seleccioná una tasación para revisar.</p>}
+            {detailLoading && (
+              <LoadingState
+                eyebrow="Detalle"
+                title="Cargando la tasación seleccionada"
+                subtitle="Traemos comparables, superficie y comentarios para revisar en contexto."
+                messages={['Cargando tasación...', 'Preparando detalle...', 'Abriendo revisión...']}
+                mode="inline"
+              />
+            )}
+            {!detailLoading && !selected && (
+              <StateCard
+                eyebrow="Sin selección"
+                title="Elegí una tasación para revisar"
+                description="Cuando selecciones un caso de la columna izquierda, vas a ver su detalle acá."
+                tone="empty"
+                mode="inline"
+              />
+            )}
 
             {!detailLoading && selected && (
               <div className="approvals-detail">

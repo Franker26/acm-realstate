@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, updateACM } from '../api.js'
 import { useAuth, useWizard } from '../App.jsx'
+import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
 const COLUMNS = [
   { key: 'nuevo', title: 'Nuevo', description: 'Tasaciones recién creadas o pendientes de completar.' },
@@ -202,8 +203,25 @@ export default function Home() {
         </div>
       </div>
 
-      {loading && <p style={{ textAlign: 'center', color: '#888' }}>Cargando tablero...</p>}
-      {error && <div className="alert alert-error">{error}</div>}
+      {loading && (
+        <LoadingState
+          eyebrow="Carga de panel"
+          title="Estamos preparando el tablero"
+          subtitle="Sincronizamos tasaciones, métricas y etapas del equipo."
+          messages={['Cargando tablero...', 'Preparando workspace...', 'Sincronizando datos...']}
+        />
+      )}
+
+      {error && !loading && (
+        <StateCard
+          eyebrow="No pudimos cargar el tablero"
+          title="El panel no respondió como esperábamos"
+          description={error}
+          tone="error"
+          mode="inline"
+          actions={<button className="btn btn-primary" onClick={() => window.location.reload()}>Reintentar</button>}
+        />
+      )}
 
       {!loading && !error && (
         <>
