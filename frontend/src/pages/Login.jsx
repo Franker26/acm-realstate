@@ -183,6 +183,17 @@ export default function Login() {
 
       <section className="login-form-panel">
         <div className="login-card login-card--featured">
+          <div className="login-card__brand-mobile">
+            <div className="login-card__brand-mobile-mark">
+              {logo ? (
+                <img src={logo} alt={`${appName} logo`} className="login-brand-lockup__logo" />
+              ) : (
+                <span>{appName.slice(0, 1).toUpperCase()}</span>
+              )}
+            </div>
+            <strong>{appName}</strong>
+            <span>Workspace de tasaciones</span>
+          </div>
           <div className="login-card__rail" aria-hidden="true" />
           <div className="login-card__header">
             <span className="login-card__eyebrow">Acceso seguro</span>
