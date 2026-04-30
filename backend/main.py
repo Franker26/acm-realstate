@@ -858,6 +858,39 @@ def _parse_zonaprop_html(html: str) -> dict:
             elif m2_tot:
                 result["superficie_cubierta"] = float(m2_tot.group(1).replace(",", "."))
 
+    # --- 5. Days on market from "Publicado hace N días/meses" text ---
+    if "dias_mercado" not in result:
+        antiquity_el = soup.find(string=re.compile(r"Publicado hace", re.I))
+        if antiquity_el:
+            m = re.search(r"hace\s+(\d+)\s+(día|mes|año)", antiquity_el, re.I)
+            if m:
+                n, unit = int(m.group(1)), m.group(2).lower()
+                if unit.startswith("día"):
+                    result["dias_mercado"] = n
+                elif unit.startswith("mes"):
+                    result["dias_mercado"] = n * 30
+                elif unit.startswith("año"):
+                    result["dias_mercado"] = n * 365
+
+    # --- 6. Orientation from icon-orientacion ---
+    _ORI_MAP = {"n": "Norte", "s": "Sur", "e": "Este", "o": "Oeste", "i": "Interno",
+                "norte": "Norte", "sur": "Sur", "este": "Este", "oeste": "Oeste", "interno": "Interno"}
+    ori_icon = soup.find("i", class_="icon-orientacion")
+    if ori_icon:
+        li = ori_icon.find_parent("li")
+        raw = li.get_text(strip=True).lower() if li else ""
+        if raw in _ORI_MAP:
+            result["orientacion"] = _ORI_MAP[raw]
+
+    # --- 7. Antigüedad from icon-antiguedad ---
+    ant_icon = soup.find("i", class_="icon-antiguedad")
+    if ant_icon:
+        li = ant_icon.find_parent("li")
+        raw = li.get_text(strip=True) if li else ""
+        m = re.search(r"(\d+)", raw)
+        if m:
+            result["antiguedad"] = int(m.group(1))
+
     return result
 
 

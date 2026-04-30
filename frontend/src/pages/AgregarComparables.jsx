@@ -116,6 +116,8 @@ export default function AgregarComparables() {
       ...(data.direccion ? { direccion: data.direccion } : {}),
       ...(data.superficie_cubierta != null ? { superficie_cubierta: String(data.superficie_cubierta) } : {}),
       ...(data.tipo ? { tipo: data.tipo } : {}),
+      ...(data.orientacion ? { orientacion: data.orientacion } : {}),
+      ...(data.antiguedad != null ? { antiguedad: String(data.antiguedad) } : {}),
     }))
     setExtractPreview(null)
   }
@@ -355,6 +357,12 @@ export default function AgregarComparables() {
                 )}
                 {extractPreview.dias_mercado != null && (
                   <tr><td style={modalStyles.label}>Días en mercado</td><td>{extractPreview.dias_mercado}</td></tr>
+                )}
+                {extractPreview.orientacion && (
+                  <tr><td style={modalStyles.label}>Orientación</td><td>{extractPreview.orientacion}</td></tr>
+                )}
+                {extractPreview.antiguedad != null && (
+                  <tr><td style={modalStyles.label}>Antigüedad</td><td>{extractPreview.antiguedad} años</td></tr>
                 )}
               </tbody>
             </table>
