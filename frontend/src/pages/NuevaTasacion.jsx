@@ -129,6 +129,7 @@ export default function NuevaTasacion() {
     <div>
       <WizardNav currentStep={1} />
       <div className="step-header">
+        <span className="page-eyebrow">Paso 1</span>
         <h1>{id ? 'Editar tasación' : 'Nueva Tasación'}</h1>
         <p>Ingresá los datos de la propiedad a tasar (sujeto del ACM).</p>
       </div>
@@ -136,52 +137,90 @@ export default function NuevaTasacion() {
       {apiError && <div className="alert alert-error">{apiError}</div>}
 
       <form onSubmit={handleSubmit}>
-        <div className="card">
-          <h2>Identificación</h2>
-          {preselectedTipo && !id && (
-            <div className="tipo-badge-selected">
-              Tipo seleccionado: <strong>{preselectedTipo}</strong>
-              <button type="button" className="tipo-badge-change" onClick={() => navigate('/acm/tipo')}>Cambiar</button>
+        <div className="workflow-layout">
+          <div className="workflow-main">
+            <div className="card workflow-card">
+              <div className="section-heading">
+                <div>
+                  <span className="section-heading__eyebrow">Identificación</span>
+                  <h2>Datos base de la propiedad</h2>
+                </div>
+              </div>
+              {preselectedTipo && !id && (
+                <div className="tipo-badge-selected">
+                  Tipo seleccionado: <strong>{preselectedTipo}</strong>
+                  <button type="button" className="tipo-badge-change" onClick={() => navigate('/acm/tipo')}>Cambiar</button>
+                </div>
+              )}
+              <div className="form-grid">
+                <div className="form-group full">
+                  <label>Nombre del ACM *</label>
+                  <input type="text" name="nombre" value={values.nombre} tabIndex={0}
+                    onChange={(e) => handleChange('nombre', e.target.value)}
+                    placeholder="Ej: Tasación Av. Corrientes 1234" />
+                  {errors.nombre && <span className="error-msg">{errors.nombre}</span>}
+                </div>
+                <div className="form-group full">
+                  <label>Dirección / Zona *</label>
+                  <AddressAutocomplete
+                    name="direccion"
+                    value={values.direccion}
+                    tabIndex={0}
+                    placeholder="Ej: Av. Corrientes 1234, CABA"
+                    onChange={(v) => handleChange('direccion', v)}
+                  />
+                  {errors.direccion && <span className="error-msg">{errors.direccion}</span>}
+                </div>
+              </div>
             </div>
-          )}
-          <div className="form-grid">
-            <div className="form-group full">
-              <label>Nombre del ACM *</label>
-              <input type="text" name="nombre" value={values.nombre} tabIndex={0}
-                onChange={(e) => handleChange('nombre', e.target.value)}
-                placeholder="Ej: Tasación Av. Corrientes 1234" />
-              {errors.nombre && <span className="error-msg">{errors.nombre}</span>}
+
+            <div className="card workflow-card">
+              <div className="section-heading">
+                <div>
+                  <span className="section-heading__eyebrow">Características</span>
+                  <h2>Composición del inmueble</h2>
+                </div>
+              </div>
+              <PropertyForm values={values} onChange={handleChange} errors={errors} hideTipo={!!preselectedTipo && !id} />
             </div>
-            <div className="form-group full">
-              <label>Dirección / Zona *</label>
-              <AddressAutocomplete
-                name="direccion"
-                value={values.direccion}
-                tabIndex={0}
-                placeholder="Ej: Av. Corrientes 1234, CABA"
-                onChange={(v) => handleChange('direccion', v)}
-              />
-              {errors.direccion && <span className="error-msg">{errors.direccion}</span>}
+
+            <div className="card workflow-card">
+              <div className="section-heading">
+                <div>
+                  <span className="section-heading__eyebrow">Notas</span>
+                  <h2>Observaciones internas</h2>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Observaciones (opcional)</label>
+                <textarea name="notas" rows={4} value={values.notas} tabIndex={13}
+                  onChange={(e) => handleChange('notas', e.target.value)}
+                  placeholder="Notas adicionales sobre la propiedad..." />
+              </div>
             </div>
           </div>
+
+          <aside className="workflow-aside">
+            <div className="card workflow-card workflow-card--compact">
+              <div className="section-heading">
+                <div>
+                  <span className="section-heading__eyebrow">Checklist</span>
+                  <h2>Antes de continuar</h2>
+                </div>
+              </div>
+              <ul className="workflow-checklist">
+                <li>Nombre claro para ubicar rápido la tasación.</li>
+                <li>Dirección precisa para comparar con mercado similar.</li>
+                <li>Superficie cubierta completa para calcular el valor base.</li>
+              </ul>
+            </div>
+          </aside>
         </div>
 
-        <div className="card">
-          <h2>Características de la Propiedad</h2>
-          <PropertyForm values={values} onChange={handleChange} errors={errors} hideTipo={!!preselectedTipo && !id} />
-        </div>
-
-        <div className="card">
-          <h2>Notas</h2>
-          <div className="form-group">
-            <label>Observaciones (opcional)</label>
-            <textarea name="notas" rows={3} value={values.notas} tabIndex={13}
-              onChange={(e) => handleChange('notas', e.target.value)}
-              placeholder="Notas adicionales sobre la propiedad..." />
+        <div className="btn-group btn-group--workspace">
+          <div className="btn-group__hint">
+            Al guardar, pasás directo a la carga de comparables.
           </div>
-        </div>
-
-        <div className="btn-group">
           <button type="submit" className="btn btn-primary" disabled={submitting}>
             {submitting && <span className="spinner" />}
             {id ? 'Guardar y continuar →' : 'Continuar → Paso 2'}

@@ -346,6 +346,7 @@ export default function AplicarPonderadores() {
     <div>
       <WizardNav currentStep={3} />
       <div className="step-header">
+        <span className="page-eyebrow">Paso 3</span>
         <h1>Ponderadores de ajuste</h1>
         <p>
           Cada barra ajusta el precio de la comparable para equipararla a la sujeto.
@@ -357,37 +358,40 @@ export default function AplicarPonderadores() {
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <button
-          className={`btn btn-sm ${advancedMode ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => {
-            if (advancedMode) {
-              const hasActive = comparables.some(comp =>
-                ADV_FACTORS.some(f => Math.abs((factorMap[comp.id]?.[f.key] ?? 1) - 1) > 0.001)
-              )
-              if (hasActive) {
-                if (!window.confirm(
-                  'Hay factores avanzados activos. Desactivar el modo avanzado los reseteará a 1.000 en todas las comparables. ¿Continuar?'
-                )) return
-                setFactorMap(prev => {
-                  const next = { ...prev }
-                  for (const comp of comparables) {
-                    next[comp.id] = { ...next[comp.id] }
-                    for (const f of ADV_FACTORS) next[comp.id][f.key] = 1
-                  }
-                  return next
-                })
+      <div className="workflow-toolbar">
+        <div className="workflow-toolbar__group">
+          <span className="workflow-toolbar__label">Modo</span>
+          <button
+            className={`btn btn-sm ${advancedMode ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => {
+              if (advancedMode) {
+                const hasActive = comparables.some(comp =>
+                  ADV_FACTORS.some(f => Math.abs((factorMap[comp.id]?.[f.key] ?? 1) - 1) > 0.001)
+                )
+                if (hasActive) {
+                  if (!window.confirm(
+                    'Hay factores avanzados activos. Desactivar el modo avanzado los reseteará a 1.000 en todas las comparables. ¿Continuar?'
+                  )) return
+                  setFactorMap(prev => {
+                    const next = { ...prev }
+                    for (const comp of comparables) {
+                      next[comp.id] = { ...next[comp.id] }
+                      for (const f of ADV_FACTORS) next[comp.id][f.key] = 1
+                    }
+                    return next
+                  })
+                }
               }
-            }
-            setAdvancedMode(v => !v)
-          }}
-        >
-          ⚙ {advancedMode ? 'Modo avanzado activo' : 'Activar modo avanzado'}
-        </button>
+              setAdvancedMode(v => !v)
+            }}
+          >
+            {advancedMode ? 'Modo avanzado activo' : 'Activar modo avanzado'}
+          </button>
+        </div>
       </div>
 
       {advancedMode && (
-        <div className="alert" style={{ background: '#e8f4fd', color: '#1565c0', border: '1px solid #90caf9', marginBottom: 12, fontSize: 12 }}>
+        <div className="alert alert-info" style={{ marginBottom: 12, fontSize: 12 }}>
           Factores adicionales habilitados: cochera, pileta, luminosidad, vistas y amenities.
         </div>
       )}

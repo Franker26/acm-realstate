@@ -19,7 +19,7 @@ import {
 
 function RoleBadges({ user }) {
   return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+    <div className="settings-badges">
       {user.is_admin && <span className="settings-badge settings-badge--admin">Admin</span>}
       {user.is_approver && <span className="settings-badge settings-badge--approver">Approver</span>}
       {!user.is_admin && <span className="settings-badge">Usuario</span>}
@@ -116,95 +116,113 @@ function UsersTab({ currentUser, onCurrentUserUpdated }) {
   }
 
   return (
-    <div>
-      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
+    <div className="settings-panel-stack">
+      {error && <div className="alert alert-error">{error}</div>}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
-        <thead>
-          <tr style={{ borderBottom: '2px solid #e0e0e0', textAlign: 'left' }}>
-            <th style={{ padding: '8px 12px' }}>Usuario</th>
-            <th style={{ padding: '8px 12px' }}>Roles</th>
-            <th style={{ padding: '8px 12px' }}>Permisos</th>
-            <th style={{ padding: '8px 12px' }}>Nueva contraseña</th>
-            <th style={{ padding: '8px 12px' }} />
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => (
-            <tr key={user.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-              <td style={{ padding: '10px 12px', fontWeight: user.username === currentUser.username ? 700 : 400 }}>
-                {user.username}
-                {user.username === currentUser.username && (
-                  <span style={{ fontSize: 11, color: '#888', marginLeft: 6 }}>(vos)</span>
-                )}
-              </td>
-              <td style={{ padding: '10px 12px' }}>
-                <RoleBadges user={user} />
-              </td>
-              <td style={{ padding: '10px 12px', minWidth: 230 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label className="settings-toggle">
-                    <input
-                      type="checkbox"
-                      checked={user.is_admin}
-                      disabled={savingRoleId === user.id}
-                      onChange={(e) => handleToggle(user, 'is_admin', e.target.checked)}
-                    />
-                    <span>Admin</span>
-                  </label>
-                  <label className="settings-toggle">
-                    <input
-                      type="checkbox"
-                      checked={user.is_approver}
-                      disabled={savingRoleId === user.id}
-                      onChange={(e) => handleToggle(user, 'is_approver', e.target.checked)}
-                    />
-                    <span>Approver</span>
-                  </label>
-                  <label className="settings-toggle">
-                    <input
-                      type="checkbox"
-                      checked={user.needs_approval}
-                      disabled={savingRoleId === user.id}
-                      onChange={(e) => handleToggle(user, 'needs_approval', e.target.checked)}
-                    />
-                    <span>Necesita aprobación</span>
-                  </label>
-                </div>
-              </td>
-              <td style={{ padding: '8px 12px' }}>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input
-                    type="password"
-                    placeholder="Nueva contraseña"
-                    value={pwdEdit[user.id] || ''}
-                    onChange={(e) => setPwdEdit((p) => ({ ...p, [user.id]: e.target.value }))}
-                    style={{ fontSize: 13, padding: '4px 8px', width: 180 }}
-                  />
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleChangePwd(user.id)}
-                    disabled={!pwdEdit[user.id] || pwdEdit[user.id].length < 4 || savingPwd[user.id]}
-                  >
-                    {savingPwd[user.id] ? <span className="spinner" /> : 'Guardar'}
-                  </button>
-                </div>
-              </td>
-              <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                {user.username !== currentUser.username && (
-                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(user.id)}>
-                    Eliminar
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <section className="settings-surface">
+        <div className="settings-section-header">
+          <div>
+            <h2>Usuarios del equipo</h2>
+            <p>Administrá accesos, roles y requisitos de aprobación sin salir del producto.</p>
+          </div>
+        </div>
 
-      {showAdd ? (
-        <form onSubmit={handleAdd} style={{ display: 'grid', gap: 10, maxWidth: 560 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="table-wrapper settings-table-wrapper">
+          <table className="settings-table">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Roles</th>
+                <th>Permisos</th>
+                <th>Nueva contraseña</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => (
+                <tr key={user.id}>
+                  <td className="settings-user-cell">
+                    <strong>{user.username}</strong>
+                    {user.username === currentUser.username && (
+                      <span className="settings-user-self">(vos)</span>
+                    )}
+                  </td>
+                  <td>
+                    <RoleBadges user={user} />
+                  </td>
+                  <td>
+                    <div className="settings-toggle-list">
+                      <label className="settings-toggle">
+                        <input
+                          type="checkbox"
+                          checked={user.is_admin}
+                          disabled={savingRoleId === user.id}
+                          onChange={(e) => handleToggle(user, 'is_admin', e.target.checked)}
+                        />
+                        <span>Admin</span>
+                      </label>
+                      <label className="settings-toggle">
+                        <input
+                          type="checkbox"
+                          checked={user.is_approver}
+                          disabled={savingRoleId === user.id}
+                          onChange={(e) => handleToggle(user, 'is_approver', e.target.checked)}
+                        />
+                        <span>Approver</span>
+                      </label>
+                      <label className="settings-toggle">
+                        <input
+                          type="checkbox"
+                          checked={user.needs_approval}
+                          disabled={savingRoleId === user.id}
+                          onChange={(e) => handleToggle(user, 'needs_approval', e.target.checked)}
+                        />
+                        <span>Necesita aprobación</span>
+                      </label>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="settings-password-row">
+                      <input
+                        type="password"
+                        placeholder="Nueva contraseña"
+                        value={pwdEdit[user.id] || ''}
+                        onChange={(e) => setPwdEdit((p) => ({ ...p, [user.id]: e.target.value }))}
+                      />
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleChangePwd(user.id)}
+                        disabled={!pwdEdit[user.id] || pwdEdit[user.id].length < 4 || savingPwd[user.id]}
+                      >
+                        {savingPwd[user.id] ? <span className="spinner" /> : 'Guardar'}
+                      </button>
+                    </div>
+                  </td>
+                  <td className="settings-table__actions">
+                    {user.username !== currentUser.username && (
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(user.id)}>
+                        Eliminar
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="settings-surface">
+        <div className="settings-section-header">
+          <div>
+            <h2>{showAdd ? 'Nuevo usuario' : 'Alta rápida'}</h2>
+            <p>La regla de seguridad se mantiene: un approver siempre conserva rol de admin.</p>
+          </div>
+        </div>
+
+        {showAdd ? (
+          <form onSubmit={handleAdd} className="settings-inline-form">
+            <div className="settings-inline-fields">
             <input
               type="text"
               placeholder="Usuario"
@@ -218,10 +236,9 @@ function UsersTab({ currentUser, onCurrentUserUpdated }) {
               placeholder="Contraseña"
               value={newUser.password}
               onChange={(e) => setNewUser((p) => ({ ...p, password: e.target.value }))}
-              style={{ fontSize: 13, padding: '6px 8px', width: 170 }}
             />
           </div>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <div className="settings-toggle-row">
             <label className="settings-toggle">
               <input
                 type="checkbox"
@@ -255,7 +272,7 @@ function UsersTab({ currentUser, onCurrentUserUpdated }) {
               <span>Necesita aprobación</span>
             </label>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="settings-actions-row">
             <button type="submit" className="btn btn-primary btn-sm" disabled={adding}>
               {adding ? <span className="spinner" /> : 'Crear'}
             </button>
@@ -265,10 +282,11 @@ function UsersTab({ currentUser, onCurrentUserUpdated }) {
           </div>
         </form>
       ) : (
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowAdd(true)}>
-          + Nuevo usuario
-        </button>
-      )}
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAdd(true)}>
+            + Nuevo usuario
+          </button>
+        )}
+      </section>
     </div>
   )
 }
@@ -320,41 +338,55 @@ function ThemeTab() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 560 }}>
+    <div className="settings-panel-stack settings-panel-stack--narrow">
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-success">{message}</div>}
 
-      <div className="card">
-        <h3 style={{ marginBottom: 16, color: 'var(--primary)' }}>Nombre de la aplicación</h3>
+      <div className="settings-surface">
+        <div className="settings-section-header">
+          <div>
+            <h2>Nombre de la aplicación</h2>
+            <p>Se refleja en el header, la experiencia de acceso y el PDF exportado.</p>
+          </div>
+        </div>
         <input
           type="text"
           value={branding.app_name || ''}
           onChange={(e) => setBranding((prev) => ({ ...prev, app_name: e.target.value }))}
-          style={{ width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: 5, fontSize: 14 }}
         />
       </div>
 
-      <div className="card">
-        <h3 style={{ marginBottom: 16, color: 'var(--primary)' }}>Color principal</h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div className="settings-surface">
+        <div className="settings-section-header">
+          <div>
+            <h2>Color principal</h2>
+            <p>Actualiza el tono dominante de toda la interfaz en tiempo real.</p>
+          </div>
+        </div>
+        <div className="settings-color-row">
           <input
             type="color"
             value={branding.primary_color || '#1a3a5c'}
             onChange={handleColorChange}
-            style={{ width: 48, height: 40, border: 'none', cursor: 'pointer', borderRadius: 6, padding: 2 }}
+            className="settings-color-picker"
           />
-          <span style={{ fontSize: 13, color: '#555' }}>{branding.primary_color}</span>
+          <span className="settings-color-value">{branding.primary_color}</span>
         </div>
       </div>
 
-      <div className="card">
-        <h3 style={{ marginBottom: 16, color: 'var(--primary)' }}>Logotipo</h3>
+      <div className="settings-surface">
+        <div className="settings-section-header">
+          <div>
+            <h2>Logotipo</h2>
+            <p>Mantené la misma línea visual entre la landing, el workspace y el reporte.</p>
+          </div>
+        </div>
         {branding.logo_data_url && (
-          <div style={{ marginBottom: 14 }}>
-            <img src={branding.logo_data_url} alt="Logo actual" style={{ maxHeight: 60, maxWidth: 220, borderRadius: 6, border: '1px solid #eee', padding: 4 }} />
+          <div className="settings-logo-preview">
+            <img src={branding.logo_data_url} alt="Logo actual" className="settings-logo-preview__image" />
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="settings-actions-row">
           <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
             {branding.logo_data_url ? 'Cambiar logo' : 'Subir logo'}
           </button>
@@ -376,7 +408,7 @@ function ThemeTab() {
         />
       </div>
 
-      <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+      <button className="btn btn-primary settings-save-button" onClick={handleSave} disabled={saving}>
         {saving && <span className="spinner" />}
         Guardar branding
       </button>
@@ -424,22 +456,25 @@ function ScraperTab() {
   }
 
   return (
-    <div className="card" style={{ maxWidth: 560 }}>
-      <h3 style={{ marginBottom: 8, color: 'var(--primary)' }}>Microservicio de extracción</h3>
-      <p style={{ fontSize: 14, color: '#555', marginBottom: 20 }}>
-        URL del scraper local (atlas). Usada para extraer datos de Zonaprop desde una IP residencial.
-        Dejá vacío para usar el fetch directo (solo funciona en desarrollo local).
-      </p>
-      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
-      {message && <div className="alert alert-success" style={{ marginBottom: 12 }}>{message}</div>}
+    <div className="settings-surface settings-surface--narrow">
+      <div className="settings-section-header">
+        <div>
+          <h2>Microservicio de extracción</h2>
+          <p>
+            URL del scraper local usada para extraer datos de Zonaprop desde una IP residencial.
+            Dejá vacío para usar el fetch directo en desarrollo local.
+          </p>
+        </div>
+      </div>
+      {error && <div className="alert alert-error">{error}</div>}
+      {message && <div className="alert alert-success">{message}</div>}
       <input
         type="url"
         placeholder="https://xxx.trycloudflare.com"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        style={{ width: '100%', padding: '8px 10px', border: '1px solid #ccc', borderRadius: 5, fontSize: 14, marginBottom: 12, boxSizing: 'border-box' }}
       />
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="settings-actions-row">
         <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
           {saving && <span className="spinner" />} Guardar
         </button>
@@ -463,27 +498,22 @@ function MapTab() {
   }
 
   return (
-    <div className="card" style={{ maxWidth: 480 }}>
-      <h3 style={{ marginBottom: 16, color: '#1a3a5c' }}>Autocompletar direcciones</h3>
-      <p style={{ fontSize: 14, color: '#555', marginBottom: 20 }}>
-        Cuando está activo, los campos de dirección sugieren resultados usando OpenStreetMap Nominatim.
-      </p>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div className="settings-surface settings-surface--narrow">
+      <div className="settings-section-header">
+        <div>
+          <h2>Autocompletar direcciones</h2>
+          <p>Cuando está activo, los campos de dirección sugieren resultados usando OpenStreetMap Nominatim.</p>
+        </div>
+      </div>
+      <div className="settings-switch-row">
         <button
           onClick={toggle}
-          style={{
-            width: 48, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
-            background: enabled ? '#1565c0' : '#ccc',
-            position: 'relative', transition: 'background 0.2s',
-          }}
+          className={`settings-switch${enabled ? ' settings-switch--enabled' : ''}`}
+          aria-pressed={enabled}
         >
-          <span style={{
-            position: 'absolute', top: 3, left: enabled ? 25 : 3,
-            width: 20, height: 20, borderRadius: '50%', background: '#fff',
-            transition: 'left 0.2s',
-          }} />
+          <span className="settings-switch__thumb" />
         </button>
-        <span style={{ fontSize: 14, fontWeight: 600 }}>
+        <span className="settings-switch__label">
           {enabled ? 'Activado' : 'Desactivado'}
         </span>
       </div>
@@ -495,43 +525,32 @@ export default function Settings() {
   const { user, refreshUser } = useAuth()
   const [tab, setTab] = useState(user?.is_admin ? 'usuarios' : 'mapa')
 
+  const tabs = [
+    user?.is_admin ? { key: 'usuarios', label: 'Usuarios y acceso', description: 'Roles, permisos y contraseñas.' } : null,
+    { key: 'mapa', label: 'OpenStreetMap', description: 'Control de autocompletado de direcciones.' },
+    user?.is_admin ? { key: 'tema', label: 'Personalización', description: 'Nombre, color y logotipo.' } : null,
+    user?.is_admin ? { key: 'scraper', label: 'Scraper', description: 'Conexión con el microservicio local.' } : null,
+  ].filter(Boolean)
+
   return (
-    <div>
+    <div className="settings-page">
       <div className="step-header">
+        <span className="page-eyebrow">Ajustes del workspace</span>
         <h1>Configuración</h1>
+        <p>Centralizá permisos, branding y servicios auxiliares sin salir de la operación diaria.</p>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-        {user?.is_admin && (
+      <div className="settings-tabs">
+        {tabs.map((item) => (
           <button
-            className={`btn btn-sm ${tab === 'usuarios' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setTab('usuarios')}
+            key={item.key}
+            className={`settings-tab${tab === item.key ? ' settings-tab--active' : ''}`}
+            onClick={() => setTab(item.key)}
           >
-            Usuarios y acceso
+            <span className="settings-tab__label">{item.label}</span>
+            <span className="settings-tab__description">{item.description}</span>
           </button>
-        )}
-        <button
-          className={`btn btn-sm ${tab === 'mapa' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setTab('mapa')}
-        >
-          OpenStreetMap
-        </button>
-        {user?.is_admin && (
-          <button
-            className={`btn btn-sm ${tab === 'tema' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setTab('tema')}
-          >
-            Personalización
-          </button>
-        )}
-        {user?.is_admin && (
-          <button
-            className={`btn btn-sm ${tab === 'scraper' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setTab('scraper')}
-          >
-            Scraper
-          </button>
-        )}
+        ))}
       </div>
 
       {tab === 'usuarios' && user?.is_admin && (

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useReducer, useRef, useState } from 'react'
-import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import {
   applyTheme,
   getSavedColor,
@@ -171,6 +171,7 @@ export function WizardNav({ currentStep }) {
 
 function AppHeader() {
   const { user, logout } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
   const [logo, setLogo] = useState(() => getSavedLogo())
   const [appName, setAppName] = useState(() => getSavedAppName())
@@ -199,43 +200,73 @@ function AppHeader() {
     navigate('/login')
   }
 
+  if (location.pathname === '/login') return null
+
+  const navItems = [
+    { to: '/', label: 'Tablero', visible: true },
+    { to: '/approvals', label: 'Aprobaciones', visible: user?.is_approver },
+    { to: '/settings', label: 'Configuración', visible: Boolean(user) },
+  ].filter((item) => item.visible)
+
   return (
     <header className="app-header">
-      <div className="app-header__left">
-        <Link to="/" className="app-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {logo && <img src={logo} alt="logo" style={{ height: 28, width: 'auto', borderRadius: 4 }} />}
-          <span>{appName}</span>
-        </Link>
-      </div>
-      {user && (
-        <div className="app-header__right">
-          {user.is_approver && (
-            <Link to="/approvals" className="header-link">
-              Aprobaciones
-            </Link>
-          )}
-          <Link to="/settings" className="header-link">
-            Configuración
+      <div className="app-header__shell">
+        <div className="app-header__left">
+          <Link to="/" className="app-title">
+            <span className="app-title__mark">
+              {logo ? (
+                <img src={logo} alt="logo" className="app-title__logo" />
+              ) : (
+                <span className="app-title__glyph">R</span>
+              )}
+            </span>
+            <span>
+              <span className="app-title__name">{appName}</span>
+              <span className="app-title__meta">Workspace de tasaciones</span>
+            </span>
           </Link>
-          <div className="header-user">
-            <div className="header-user__avatar">
-              {user.username.slice(0, 1).toUpperCase()}
-            </div>
-            <div>
-              <div className="header-user__name">{user.username}</div>
-              <div className="header-user__role">
-                {user.is_approver ? 'Admin approver' : user.is_admin ? 'Admin' : 'Usuario'}
+        </div>
+
+        {user && (
+          <div className="app-header__right">
+            <nav className="header-nav" aria-label="Principal">
+              {navItems.map((item) => {
+                const isActive = item.to === '/'
+                  ? location.pathname === '/'
+                  : location.pathname.startsWith(item.to)
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={`header-link${isActive ? ' header-link--active' : ''}`}
+                  >
+                    {item.label}
+                  </Link>
+                )
+              })}
+            </nav>
+
+            <div className="header-user">
+              <div className="header-user__avatar">
+                {user.username.slice(0, 1).toUpperCase()}
+              </div>
+              <div>
+                <div className="header-user__name">{user.username}</div>
+                <div className="header-user__role">
+                  {user.is_approver ? 'Admin approver' : user.is_admin ? 'Admin' : 'Usuario'}
+                </div>
               </div>
             </div>
+
+            <button
+              onClick={handleLogout}
+              className="header-logout"
+            >
+              Salir
+            </button>
           </div>
-          <button
-            onClick={handleLogout}
-            className="header-logout"
-          >
-            Salir
-          </button>
-        </div>
-      )}
+        )}
+      </div>
     </header>
   )
 }

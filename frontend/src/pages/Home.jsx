@@ -4,10 +4,10 @@ import { deleteACM, listACMs, updateACM } from '../api.js'
 import { useAuth, useWizard } from '../App.jsx'
 
 const COLUMNS = [
-  { key: 'nuevo',        title: 'Nuevo' },
-  { key: 'en_progreso',  title: 'En progreso' },
-  { key: 'finalizado',   title: 'Finalizado' },
-  { key: 'cancelado',    title: 'Cancelado' },
+  { key: 'nuevo', title: 'Nuevo', description: 'Tasaciones recién creadas o pendientes de completar.' },
+  { key: 'en_progreso', title: 'En progreso', description: 'Trabajos con comparables o ajustes en análisis.' },
+  { key: 'finalizado', title: 'Finalizado', description: 'Tasaciones listas para exportar o compartir.' },
+  { key: 'cancelado', title: 'Cancelado', description: 'Análisis descartados o pausados.' },
 ]
 
 function initials(name = '') {
@@ -26,6 +26,41 @@ function statusLabel(acm) {
   return acm.approval_status || 'Pendiente'
 }
 
+function statusMeta(acm) {
+  const label = statusLabel(acm)
+  const normalized = String(label).toLowerCase()
+
+  if (normalized.includes('cambio')) {
+    return {
+      label,
+      tone: 'danger',
+      hint: 'Requiere cambios antes de poder aprobarse.',
+    }
+  }
+
+  if (normalized.includes('aprob')) {
+    return {
+      label,
+      tone: 'success',
+      hint: 'Tasacion aprobada y lista para continuar o exportar.',
+    }
+  }
+
+  if (normalized.includes('pendiente')) {
+    return {
+      label,
+      tone: 'warning',
+      hint: 'Pendiente de revision y aprobacion.',
+    }
+  }
+
+  return {
+    label,
+    tone: 'neutral',
+    hint: 'Esta tasacion no requiere aprobacion.',
+  }
+}
+
 export default function Home() {
   const [acms, setAcms] = useState([])
   const [loading, setLoading] = useState(true)
@@ -33,6 +68,7 @@ export default function Home() {
   const [updatingId, setUpdatingId] = useState(null)
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverCol, setDragOverCol] = useState(null)
+  const [openMenuId, setOpenMenuId] = useState(null)
   const { dispatch } = useWizard()
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -44,6 +80,14 @@ export default function Home() {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    function handleWindowClick() {
+      setOpenMenuId(null)
+    }
+    window.addEventListener('click', handleWindowClick)
+    return () => window.removeEventListener('click', handleWindowClick)
+  }, [])
+
   const grouped = useMemo(() => {
     const base = Object.fromEntries(COLUMNS.map((column) => [column.key, []]))
     for (const acm of acms) {
@@ -51,8 +95,24 @@ export default function Home() {
       if (!base[key]) base[key] = []
       base[key].push(acm)
     }
+    Object.values(base).forEach((items) => {
+      items.sort((a, b) => new Date(b.updated_at || b.fecha_creacion) - new Date(a.updated_at || a.fecha_creacion))
+    })
     return base
   }, [acms])
+
+  const summary = useMemo(() => {
+    const pendingApprovals = acms.filter((acm) => String(acm.approval_status || '').toLowerCase() === 'pendiente').length
+    const completed = grouped.finalizado?.length || 0
+    const inFlight = (grouped.nuevo?.length || 0) + (grouped.en_progreso?.length || 0)
+    const comparables = acms.reduce((total, acm) => total + (acm.cantidad_comparables || 0), 0)
+    return [
+      { label: 'Tasaciones activas', value: inFlight, tone: 'blue' },
+      { label: 'Finalizadas', value: completed, tone: 'green' },
+      { label: 'Pendientes de aprobación', value: pendingApprovals, tone: 'amber' },
+      { label: 'Comparables cargados', value: comparables, tone: 'violet' },
+    ]
+  }, [acms, grouped])
 
   function handleNew() {
     dispatch({ type: 'RESET' })
@@ -127,105 +187,151 @@ export default function Home() {
   return (
     <div>
       <div className="home-kanban-hero">
-        <div>
+        <div className="home-kanban-hero__copy">
+          <span className="page-eyebrow">Workspace operativo</span>
           <h1>Tablero de tasaciones</h1>
           <p>
             {user?.is_admin
-              ? 'Vista general del flujo de trabajo con todas las tasaciones del equipo.'
-              : 'Seguí el estado de tus tasaciones y movelas manualmente entre etapas.'}
+              ? 'Vista general del flujo de trabajo con todas las tasaciones del equipo, aprobación incluida.'
+              : 'Seguí tus tasaciones, retomá el paso correcto y mové cada caso entre etapas con menos fricción.'}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={handleNew}>+ Nueva Tasación</button>
+        <div className="home-kanban-hero__actions">
+          <div className="home-kanban-hero__hint">Arrastrá cards entre columnas o cambiá la etapa desde cada ficha.</div>
+          <button className="btn btn-primary" onClick={handleNew}>+ Nueva tasación</button>
+        </div>
       </div>
 
       {loading && <p style={{ textAlign: 'center', color: '#888' }}>Cargando tablero...</p>}
       {error && <div className="alert alert-error">{error}</div>}
 
       {!loading && !error && (
-        <div className="kanban-board">
-          {COLUMNS.map((column) => {
-            const isDragTarget = dragOverCol === column.key
-            const isCancelled = column.key === 'Cancelado'
-            return (
-              <section
-                key={column.key}
-                className={`kanban-column${isDragTarget ? ' kanban-column--drop-target' : ''}${isCancelled ? ' kanban-column--cancelled' : ''}`}
-                onDragOver={(e) => handleDragOver(e, column.key)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, column.key)}
-              >
-                <div className="kanban-column__header">
-                  <h2>{column.title}</h2>
-                  <span>{grouped[column.key]?.length || 0}</span>
-                </div>
+        <>
+          <section className="dashboard-metrics">
+            {summary.map((item) => (
+              <article key={item.label} className={`dashboard-metric dashboard-metric--${item.tone}`}>
+                <span className="dashboard-metric__label">{item.label}</span>
+                <strong className="dashboard-metric__value">{item.value}</strong>
+              </article>
+            ))}
+          </section>
 
-                <div className="kanban-column__body">
-                  {(grouped[column.key] || []).map((acm) => {
-                    const isBeingDragged = draggedId === acm.id
-                    return (
-                      <article
-                        key={acm.id}
-                        className={`kanban-card${isCancelled ? ' kanban-card--cancelled' : ''}`}
-                        draggable={!updatingId}
-                        onDragStart={(e) => handleDragStart(e, acm)}
-                        onDragEnd={handleDragEnd}
-                        style={{ opacity: isBeingDragged ? 0.4 : 1, cursor: 'grab' }}
-                      >
-                        <div className="kanban-card__top">
-                          <div>
-                            <div className="kanban-card__title">{acm.nombre}</div>
-                            <div className="kanban-card__address">{acm.direccion}</div>
-                          </div>
-                          <span className="kanban-card__status">{statusLabel(acm)}</span>
-                        </div>
-
-                        <div className="kanban-card__meta">
-                          <div className="kanban-card__owner">
-                            <div
-                              className="kanban-card__avatar"
-                              style={{ background: avatarColor(acm.owner_username || acm.nombre) }}
-                            >
-                              {initials(acm.owner_username || acm.nombre)}
-                            </div>
-                            <span>{acm.owner_username || 'Sin asignar'}</span>
-                          </div>
-                          <span>{acm.cantidad_comparables} comp.</span>
-                          <span>{new Date(acm.fecha_creacion).toLocaleDateString('es-AR')}</span>
-                        </div>
-
-                        <div className="kanban-card__footer">
-                          <select
-                            value={acm.stage || 'nuevo'}
-                            onChange={(e) => handleStageChange(acm, e.target.value)}
-                            disabled={updatingId === acm.id}
-                          >
-                            {COLUMNS.map((option) => (
-                              <option key={option.key} value={option.key}>{option.title}</option>
-                            ))}
-                          </select>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <button className="btn btn-secondary btn-sm" onClick={() => handleOpen(acm)}>
-                              Abrir
-                            </button>
-                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(acm.id, acm.nombre)}>
-                              Eliminar
-                            </button>
-                          </div>
-                        </div>
-                      </article>
-                    )
-                  })}
-
-                  {(!grouped[column.key] || grouped[column.key].length === 0) && (
-                    <div className={`kanban-empty${isDragTarget ? ' kanban-empty--highlight' : ''}`}>
-                      {isDragTarget ? 'Soltá aquí' : 'No hay tasaciones en esta etapa.'}
+          <div className="kanban-board">
+            {COLUMNS.map((column) => {
+              const isDragTarget = dragOverCol === column.key
+              const isCancelled = column.key === 'cancelado'
+              return (
+                <section
+                  key={column.key}
+                  className={`kanban-column${isDragTarget ? ' kanban-column--drop-target' : ''}${isCancelled ? ' kanban-column--cancelled' : ''}`}
+                  onDragOver={(e) => handleDragOver(e, column.key)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, column.key)}
+                >
+                  <div className="kanban-column__header">
+                    <div>
+                      <h2>{column.title}</h2>
+                      <p>{column.description}</p>
                     </div>
-                  )}
-                </div>
-              </section>
-            )
-          })}
-        </div>
+                    <span>{grouped[column.key]?.length || 0}</span>
+                  </div>
+
+                  <div className="kanban-column__body">
+                    {(grouped[column.key] || []).map((acm) => {
+                      const isBeingDragged = draggedId === acm.id
+                      const status = statusMeta(acm)
+                      return (
+                        <article
+                          key={acm.id}
+                          className={`kanban-card${isCancelled ? ' kanban-card--cancelled' : ''}`}
+                          draggable={!updatingId}
+                          onDragStart={(e) => handleDragStart(e, acm)}
+                          onDragEnd={handleDragEnd}
+                          onClick={() => handleOpen(acm)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              handleOpen(acm)
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          style={{ opacity: isBeingDragged ? 0.4 : 1, cursor: 'grab' }}
+                        >
+                          <div className="kanban-card__top">
+                            <div>
+                              <div className="kanban-card__title">{acm.nombre}</div>
+                              <div className="kanban-card__address">{acm.direccion}</div>
+                            </div>
+                            <div className="kanban-card__top-actions">
+                              <span
+                                className={`kanban-card__status kanban-card__status--${status.tone}`}
+                                title={status.hint}
+                              >
+                                {status.label}
+                              </span>
+                              <div className="kanban-card__menu-wrap">
+                                <button
+                                  type="button"
+                                  className="kanban-card__menu-trigger"
+                                  aria-label="Más acciones"
+                                  aria-expanded={openMenuId === acm.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setOpenMenuId((current) => current === acm.id ? null : acm.id)
+                                  }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                  ⋯
+                                </button>
+                                {openMenuId === acm.id && (
+                                  <div className="kanban-card__menu" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      type="button"
+                                      className="kanban-card__menu-item kanban-card__menu-item--danger"
+                                      onClick={() => handleDelete(acm.id, acm.nombre)}
+                                    >
+                                      Eliminar tasación
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="kanban-card__meta">
+                            <div className="kanban-card__owner">
+                              <div
+                                className="kanban-card__avatar"
+                                style={{ background: avatarColor(acm.owner_username || acm.nombre) }}
+                              >
+                                {initials(acm.owner_username || acm.nombre)}
+                              </div>
+                              <span>{acm.owner_username || 'Sin asignar'}</span>
+                            </div>
+                            <span>Act. {new Date(acm.updated_at || acm.fecha_creacion).toLocaleDateString('es-AR')}</span>
+                          </div>
+
+                          <div className="kanban-card__footer">
+                            <div className="kanban-card__footer-note">
+                              Arrastrá para mover de etapa.
+                            </div>
+                          </div>
+                        </article>
+                      )
+                    })}
+
+                    {(!grouped[column.key] || grouped[column.key].length === 0) && (
+                      <div className={`kanban-empty${isDragTarget ? ' kanban-empty--highlight' : ''}`}>
+                        {isDragTarget ? 'Soltá aquí para mover la tasación.' : 'Todavía no hay tasaciones en esta etapa.'}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
+        </>
       )}
     </div>
   )
