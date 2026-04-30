@@ -64,6 +64,7 @@ export default function AgregarComparables() {
   const [apiError, setApiError] = useState(null)
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState(null)
+  const [extractPreview, setExtractPreview] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [pageReady, setPageReady] = useState(false)
   const { dispatch } = useWizard()
@@ -98,17 +99,27 @@ export default function AgregarComparables() {
     setExtractError(null)
     try {
       const data = await extractZonaprop(form.url)
-      setForm((prev) => ({
-        ...prev,
-        ...(data.precio != null ? { precio: String(data.precio) } : {}),
-        ...(data.dias_mercado != null ? { dias_mercado: String(data.dias_mercado) } : {}),
-        ...(data.direccion ? { direccion: data.direccion } : {}),
-      }))
+      setExtractPreview(data)
     } catch (e) {
       setExtractError(e.message)
     } finally {
       setExtracting(false)
     }
+  }
+
+  function handleConfirmExtract() {
+    const data = extractPreview
+    setForm((prev) => ({
+      ...prev,
+      ...(data.precio != null ? { precio: String(data.precio) } : {}),
+      ...(data.dias_mercado != null ? { dias_mercado: String(data.dias_mercado) } : {}),
+      ...(data.direccion ? { direccion: data.direccion } : {}),
+      ...(data.superficie_cubierta != null ? { superficie_cubierta: String(data.superficie_cubierta) } : {}),
+      ...(data.tipo ? { tipo: data.tipo } : {}),
+      ...(data.orientacion ? { orientacion: data.orientacion } : {}),
+      ...(data.antiguedad != null ? { antiguedad: String(data.antiguedad) } : {}),
+    }))
+    setExtractPreview(null)
   }
 
   async function handleSubmit(e) {
@@ -324,6 +335,61 @@ export default function AgregarComparables() {
       {comparables.length === 0 && (
         <p className="error-msg" style={{ textAlign: 'right', marginTop: 4 }}>Agregá al menos una comparable para continuar.</p>
       )}
+
+      {extractPreview && (
+        <div style={modalStyles.overlay}>
+          <div style={modalStyles.box}>
+            <h3 style={{ marginTop: 0 }}>Datos extraídos de Zonaprop</h3>
+            <p style={{ color: '#666', marginBottom: 16 }}>Revisá los datos encontrados y confirmá para cargarlos en el formulario.</p>
+            <table style={modalStyles.table}>
+              <tbody>
+                {extractPreview.precio != null && (
+                  <tr><td style={modalStyles.label}>Precio</td><td><strong>USD {extractPreview.precio.toLocaleString('es-AR')}</strong></td></tr>
+                )}
+                {extractPreview.direccion && (
+                  <tr><td style={modalStyles.label}>Dirección</td><td>{extractPreview.direccion}</td></tr>
+                )}
+                {extractPreview.superficie_cubierta != null && (
+                  <tr><td style={modalStyles.label}>Sup. cubierta</td><td>{extractPreview.superficie_cubierta} m²</td></tr>
+                )}
+                {extractPreview.tipo && (
+                  <tr><td style={modalStyles.label}>Tipo</td><td>{extractPreview.tipo}</td></tr>
+                )}
+                {extractPreview.dias_mercado != null && (
+                  <tr><td style={modalStyles.label}>Días en mercado</td><td>{extractPreview.dias_mercado}</td></tr>
+                )}
+                {extractPreview.orientacion && (
+                  <tr><td style={modalStyles.label}>Orientación</td><td>{extractPreview.orientacion}</td></tr>
+                )}
+                {extractPreview.antiguedad != null && (
+                  <tr><td style={modalStyles.label}>Antigüedad</td><td>{extractPreview.antiguedad} años</td></tr>
+                )}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setExtractPreview(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleConfirmExtract}>Confirmar e insertar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+const modalStyles = {
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+  },
+  box: {
+    background: '#fff', borderRadius: 12, padding: 32, maxWidth: 480, width: '90%',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+  },
+  table: {
+    width: '100%', borderCollapse: 'collapse',
+  },
+  label: {
+    color: '#888', paddingRight: 16, paddingBottom: 8, verticalAlign: 'top', whiteSpace: 'nowrap',
+  },
 }
