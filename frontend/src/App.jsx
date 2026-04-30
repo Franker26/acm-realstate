@@ -317,9 +317,34 @@ function AppRoutes() {
   )
 }
 
+function AdminLayout({ children }) {
+  const navigate = useNavigate()
+  function handleLogout() {
+    localStorage.removeItem('acm_admin_token')
+    localStorage.removeItem('acm_admin_user')
+    navigate('/admin')
+  }
+  return (
+    <div className="admin-shell">
+      <header className="admin-header">
+        <span className="admin-header__brand">ACM Admin</span>
+        <nav>
+          <Link to="/admin/companies" className="admin-link" style={{ color: 'rgba(255,255,255,0.85)' }}>
+            Empresas
+          </Link>
+        </nav>
+        <button onClick={handleLogout} className="admin-btn admin-btn--sm" style={{ marginLeft: 'auto' }}>
+          Salir
+        </button>
+      </header>
+      <div className="admin-content">{children}</div>
+    </div>
+  )
+}
+
 function AdminRoute({ children }) {
   const token = localStorage.getItem('acm_admin_token')
-  return token ? children : <Navigate to="/admin" replace />
+  return token ? <AdminLayout>{children}</AdminLayout> : <Navigate to="/admin" replace />
 }
 
 export default function App() {
