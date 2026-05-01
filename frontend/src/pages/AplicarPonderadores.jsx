@@ -210,8 +210,8 @@ function FactorSlider({ factorKey, label, tooltip, value, recommendation, contex
         )}
         {context && <div className="factor-context">{context}</div>}
       </div>
-      <span className="factor-row-pct">{pctLabel(sliderVal)}</span>
-      <span className="factor-row-val">{value.toFixed(3)}</span>
+      <span className={`factor-row-pct${value > 1 ? ' factor-val--positive' : value < 1 ? ' factor-val--negative' : ''}`}>{pctLabel(sliderVal)}</span>
+      <span className={`factor-row-val${value > 1 ? ' factor-val--positive' : value < 1 ? ' factor-val--negative' : ''}`}>{value.toFixed(3)}</span>
     </div>
   )
 }

@@ -1102,6 +1102,14 @@ tr:hover td { background: #f8fafc; }
   text-align: right;
 }
 
+.factor-val--positive {
+  color: #2e7d32;
+}
+
+.factor-val--negative {
+  color: #c62828;
+}
+
 /* ---- Tipo ACM selection ---- */
 .tipo-grid {
   display: grid;
