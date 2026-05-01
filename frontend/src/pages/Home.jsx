@@ -91,8 +91,7 @@ export default function Home() {
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverCol, setDragOverCol] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
-  const [activeMobileStage, setActiveMobileStage] = useState('all')
-  const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const { dispatch } = useWizard()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -125,24 +124,45 @@ export default function Home() {
     return base
   }, [acms])
 
-  const mobileFeed = useMemo(() => {
-    const items = [...acms].sort((a, b) => new Date(b.updated_at || b.fecha_creacion) - new Date(a.updated_at || a.fecha_creacion))
-    if (activeMobileStage === 'all') return items
-    return items.filter((item) => (item.stage || 'nuevo') === activeMobileStage)
-  }, [acms, activeMobileStage])
+  const recentAcms = useMemo(() => {
+    return [...acms].sort((a, b) => new Date(b.updated_at || b.fecha_creacion) - new Date(a.updated_at || a.fecha_creacion))
+  }, [acms])
 
-  const summary = useMemo(() => {
+  const spotlightAcms = useMemo(() => {
+    return recentAcms.filter((item) => (item.stage || 'nuevo') !== 'cancelado').slice(0, 6)
+  }, [recentAcms])
+
+  const actionableAcms = useMemo(() => {
+    const pending = recentAcms.filter((item) => {
+      const approvalPending = String(item.approval_status || '').toLowerCase() === 'pendiente'
+      const activeStage = ['nuevo', 'en_progreso'].includes(item.stage || 'nuevo')
+      return approvalPending || activeStage
+    })
+    return (pending.length ? pending : recentAcms).slice(0, 4)
+  }, [recentAcms])
+
+  const mobileOverview = useMemo(() => {
     const pendingApprovals = acms.filter((acm) => String(acm.approval_status || '').toLowerCase() === 'pendiente').length
     const completed = grouped.finalizado?.length || 0
     const inFlight = (grouped.nuevo?.length || 0) + (grouped.en_progreso?.length || 0)
     const comparables = acms.reduce((total, acm) => total + (acm.cantidad_comparables || 0), 0)
-    return [
-      { label: 'Tasaciones activas', value: inFlight, tone: 'blue', note: 'Casos en trabajo real' },
-      { label: 'Finalizadas', value: completed, tone: 'green', note: 'Listas para cierre o entrega' },
-      { label: 'Pendientes de aprobación', value: pendingApprovals, tone: 'amber', note: 'Esperando revisión del equipo' },
-      { label: 'Comparables cargados', value: comparables, tone: 'violet', note: 'Base de mercado acumulada' },
-    ]
+    return {
+      total: acms.length,
+      pendingApprovals,
+      completed,
+      inFlight,
+      comparables,
+    }
   }, [acms, grouped])
+
+  const summary = useMemo(() => {
+    return [
+      { label: 'Tasaciones activas', value: mobileOverview.inFlight, tone: 'blue', note: 'Casos en trabajo real' },
+      { label: 'Finalizadas', value: mobileOverview.completed, tone: 'green', note: 'Listas para cierre o entrega' },
+      { label: 'Pendientes de aprobación', value: mobileOverview.pendingApprovals, tone: 'amber', note: 'Esperando revisión del equipo' },
+      { label: 'Comparables cargados', value: mobileOverview.comparables, tone: 'violet', note: 'Base de mercado acumulada' },
+    ]
+  }, [mobileOverview])
 
   function handleNew() {
     dispatch({ type: 'RESET' })
@@ -150,12 +170,12 @@ export default function Home() {
   }
 
   function handleMobileNavigate(path) {
-    setMobilePanelOpen(false)
+    setMobileDrawerOpen(false)
     navigate(path)
   }
 
   function handleMobileLogout() {
-    setMobilePanelOpen(false)
+    setMobileDrawerOpen(false)
     logout()
     navigate('/login')
   }
@@ -277,102 +297,152 @@ export default function Home() {
       {!loading && !error && (
         <>
           <section className="home-mobile-shell">
-            <div className="home-mobile-topbar">
-              <div>
-                <span className="page-eyebrow">Workspace operativo</span>
-                <div className="home-mobile-greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</div>
-                <p className="home-mobile-copy">
-                  {user?.is_admin
-                    ? 'Priorizá, retomá y desbloqueá tasaciones del equipo desde un feed continuo.'
-                    : 'Retomá rápido tus tasaciones y entrá directo a la etapa que importa.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="home-mobile-panel-toggle"
-                onClick={() => setMobilePanelOpen((value) => !value)}
-                aria-expanded={mobilePanelOpen}
-                aria-label="Abrir panel de utilidades"
-              >
-                <span />
-                <span />
-                <span />
-              </button>
-            </div>
+            <button
+              type="button"
+              className={`home-mobile-drawer-backdrop${mobileDrawerOpen ? ' is-open' : ''}`}
+              onClick={() => setMobileDrawerOpen(false)}
+              aria-label="Cerrar panel lateral"
+            />
 
-            <div className="home-mobile-composer">
-              <button className="btn btn-primary home-mobile-create" onClick={handleNew}>
-                + Nueva tasación
-              </button>
-              <div className="home-mobile-stats">
-                {summary.slice(0, 3).map((item) => (
-                  <article key={item.label} className={`dashboard-metric dashboard-metric--${item.tone}`}>
-                    <span className="dashboard-metric__label">{item.label}</span>
-                    <strong className="dashboard-metric__value">{item.value}</strong>
-                  </article>
-                ))}
-              </div>
-            </div>
-
-            <div className="home-mobile-stage-rail">
-              <button
-                type="button"
-                className={`home-mobile-stage-pill${activeMobileStage === 'all' ? ' is-active' : ''}`}
-                onClick={() => setActiveMobileStage('all')}
-              >
-                <span>Todo</span>
-                <strong>{acms.length}</strong>
-              </button>
-              {COLUMNS.map((column) => (
-                <button
-                  key={column.key}
-                  type="button"
-                  className={`home-mobile-stage-pill home-mobile-stage-pill--${column.tone}${activeMobileStage === column.key ? ' is-active' : ''}`}
-                  onClick={() => setActiveMobileStage(column.key)}
-                >
-                  <span>{column.title}</span>
-                  <strong>{grouped[column.key]?.length || 0}</strong>
-                </button>
-              ))}
-            </div>
-
-            <div className={`home-mobile-utility-panel${mobilePanelOpen ? ' is-open' : ''}`}>
-              <div className="home-mobile-utility-panel__header">
-                <div>
-                  <span className="home-mobile-utility-panel__eyebrow">Accesos</span>
-                  <strong>Panel operativo</strong>
+            <aside className={`home-mobile-drawer${mobileDrawerOpen ? ' is-open' : ''}`} aria-hidden={!mobileDrawerOpen}>
+              <div className="home-mobile-drawer__header">
+                <div className="home-mobile-drawer__identity">
+                  <div className="home-mobile-drawer__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
+                    {initials(user?.username || 'Usuario')}
+                  </div>
+                  <div>
+                    <strong>{user?.username || 'Usuario'}</strong>
+                    <span>{user?.is_admin ? 'Administrador' : 'Workspace operativo'}</span>
+                  </div>
                 </div>
-                <button type="button" className="home-mobile-utility-close" onClick={() => setMobilePanelOpen(false)}>×</button>
+                <button type="button" className="home-mobile-drawer__close" onClick={() => setMobileDrawerOpen(false)}>
+                  ×
+                </button>
               </div>
-              <div className="home-mobile-utility-list">
+
+              <div className="home-mobile-drawer__actions">
+                <button type="button" className="settings-sidebar-item settings-sidebar-item--active" onClick={() => handleMobileNavigate('/settings')}>
+                  Configuración
+                </button>
+                <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/settings')}>
+                  Cambiar contraseña
+                </button>
                 {user?.is_approver && (
-                  <button type="button" className="settings-sidebar-item settings-sidebar-item--active" onClick={() => handleMobileNavigate('/approvals')}>
+                  <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/approvals')}>
                     Aprobaciones
                   </button>
                 )}
-                <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/settings')}>
-                  Configuración
-                </button>
-                <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/')}>
-                  Refrescar tablero
-                </button>
                 <button type="button" className="settings-sidebar-item" onClick={handleMobileLogout}>
                   Cerrar sesión
                 </button>
               </div>
-            </div>
+            </aside>
 
-            <div className="home-mobile-feed">
-              <div className="home-mobile-feed__header">
-                <span className="home-mobile-section-label">Feed activo</span>
-                <span className="home-mobile-feed__count">{mobileFeed.length} casos</span>
+            <header className="home-mobile-header">
+              <button
+                type="button"
+                className="home-mobile-user-trigger"
+                onClick={() => setMobileDrawerOpen(true)}
+                aria-expanded={mobileDrawerOpen}
+                aria-label="Abrir panel de usuario"
+              >
+                <span className="home-mobile-user-trigger__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
+                  {initials(user?.username || 'Usuario')}
+                </span>
+                <span className="home-mobile-user-trigger__name">{user?.username || 'Usuario'}</span>
+              </button>
+              <div className="home-mobile-brand-lockup">
+                <span className="home-mobile-brand-lockup__mark">R</span>
+                <strong>Reval</strong>
               </div>
-              {mobileFeed.map((acm) => {
+            </header>
+
+            <section className="home-mobile-overview">
+              <span className="home-mobile-overview__eyebrow">Resumen operativo</span>
+              <h1>{greeting()}{user?.username ? `, ${user.username}` : ''}</h1>
+              <p>
+                {mobileOverview.total > 0
+                  ? `Tenés ${mobileOverview.inFlight} ACM activos y ${mobileOverview.pendingApprovals} pendiente${mobileOverview.pendingApprovals === 1 ? '' : 's'} de aprobación.`
+                  : 'Todavía no hay ACMs activos para seguir desde el celular.'}
+              </p>
+              <div className="home-mobile-overview__metrics">
+                <article className="home-mobile-metric-card">
+                  <span>Activos</span>
+                  <strong>{mobileOverview.inFlight}</strong>
+                </article>
+                <article className="home-mobile-metric-card">
+                  <span>Pendientes</span>
+                  <strong>{mobileOverview.pendingApprovals}</strong>
+                </article>
+                <article className="home-mobile-metric-card">
+                  <span>Finalizados</span>
+                  <strong>{mobileOverview.completed}</strong>
+                </article>
+              </div>
+            </section>
+
+            <section className="home-mobile-carousel-block">
+              <div className="home-mobile-block-header">
+                <div>
+                  <span className="home-mobile-section-label">ACMs</span>
+                  <strong>Deslizá y retomá rápido</strong>
+                </div>
+                <span className="home-mobile-pill-count">{spotlightAcms.length}</span>
+              </div>
+
+              {spotlightAcms.length > 0 ? (
+                <div className="home-mobile-carousel" role="list" aria-label="ACMs recientes">
+                  {spotlightAcms.map((acm) => {
+                    const status = statusMeta(acm)
+                    return (
+                      <article key={acm.id} className={`home-mobile-carousel-card home-mobile-carousel-card--${status.tone}`} role="listitem">
+                        <div className="home-mobile-carousel-card__top">
+                          <span className="home-mobile-carousel-card__stage">{(acm.stage || 'nuevo').replace('_', ' ')}</span>
+                          <span className={`kanban-card__status kanban-card__status--${status.tone}`}>{status.label}</span>
+                        </div>
+                        <div className="home-mobile-carousel-card__body">
+                          <strong>{acm.nombre}</strong>
+                          <p>{acm.direccion}</p>
+                        </div>
+                        <div className="home-mobile-carousel-card__stats">
+                          <div>
+                            <span>Comparables</span>
+                            <strong>{acm.cantidad_comparables || 0}</strong>
+                          </div>
+                          <div>
+                            <span>Actualizado</span>
+                            <strong>{new Date(acm.updated_at || acm.fecha_creacion).toLocaleDateString('es-AR')}</strong>
+                          </div>
+                        </div>
+                        <button type="button" className="btn btn-primary home-mobile-carousel-card__cta" onClick={() => handleOpen(acm)}>
+                          Retomar ACM
+                        </button>
+                      </article>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="kanban-empty">
+                  No hay ACMs activos para mostrar en el carrusel.
+                </div>
+              )}
+            </section>
+
+            <section className="home-mobile-queue">
+              <div className="home-mobile-block-header">
+                <div>
+                  <span className="home-mobile-section-label">En foco</span>
+                  <strong>Lo más urgente</strong>
+                </div>
+                <span className="home-mobile-feed__count">{actionableAcms.length} casos</span>
+              </div>
+
+              {actionableAcms.map((acm) => {
                 const status = statusMeta(acm)
                 return (
                   <article
                     key={acm.id}
-                    className="kanban-card home-mobile-card"
+                    className="home-mobile-list-card"
                     onClick={() => handleOpen(acm)}
                     tabIndex={0}
                     role="button"
@@ -383,38 +453,44 @@ export default function Home() {
                       }
                     }}
                   >
-                    <div className="kanban-card__top">
+                    <div className="home-mobile-list-card__main">
                       <div>
                         <div className="kanban-card__title">{acm.nombre}</div>
                         <div className="kanban-card__address">{acm.direccion}</div>
                       </div>
                       <span className={`kanban-card__status kanban-card__status--${status.tone}`}>{status.label}</span>
                     </div>
-                    <div className="home-mobile-card__meta">
-                      <div className="kanban-card__owner">
-                        <div
-                          className="kanban-card__avatar"
-                          style={{ background: avatarColor(acm.owner_username || acm.nombre) }}
-                        >
-                          {initials(acm.owner_username || acm.nombre)}
-                        </div>
-                        <span>{acm.owner_username || 'Sin asignar'}</span>
-                      </div>
+                    <div className="home-mobile-list-card__meta">
+                      <span>{comparablesLabel(acm)}</span>
                       <span>{new Date(acm.updated_at || acm.fecha_creacion).toLocaleDateString('es-AR')}</span>
                     </div>
                     <div className="kanban-card__insights">
-                      <span className="kanban-card__chip">{comparablesLabel(acm)}</span>
                       <span className="kanban-card__chip">{stageProgress(acm)}</span>
+                      <span className="kanban-card__chip">{acm.owner_username || 'Sin asignar'}</span>
                     </div>
                   </article>
                 )
               })}
-              {mobileFeed.length === 0 && (
+              {actionableAcms.length === 0 && (
                 <div className="kanban-empty">
-                  No hay tasaciones en esta vista por ahora.
+                  No hay casos urgentes en este momento.
                 </div>
               )}
-            </div>
+            </section>
+
+            <nav className="home-mobile-dock" aria-label="Acciones rápidas">
+              {user?.is_approver && (
+                <button type="button" className="home-mobile-dock__item" onClick={() => handleMobileNavigate('/approvals')}>
+                  Aprobaciones
+                </button>
+              )}
+              <button type="button" className="home-mobile-dock__primary" onClick={handleNew}>
+                + ACM rápido
+              </button>
+              <button type="button" className="home-mobile-dock__item" onClick={() => setMobileDrawerOpen(true)}>
+                Perfil
+              </button>
+            </nav>
           </section>
 
           <section className="dashboard-metrics">
