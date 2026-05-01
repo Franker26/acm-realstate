@@ -115,3 +115,48 @@ export function StateCard({
     </section>
   )
 }
+
+export function MobileWorkspaceLoading({
+  eyebrow = 'Cargando',
+  title,
+  subtitle,
+  messages,
+  metrics,
+}) {
+  const typed = useTypewriter(messages, 60, 1400)
+
+  return (
+    <section className="mobile-loading-shell" aria-live="polite" aria-busy="true">
+      <div className="mobile-loading-shell__hero">
+        <span className="mobile-loading-shell__eyebrow">{eyebrow}</span>
+        {title && <h1>{title}</h1>}
+        {subtitle && <p>{subtitle}</p>}
+        {metrics?.length ? (
+          <div className="mobile-loading-shell__metrics">
+            {metrics.map((metric) => (
+              <article key={metric.label} className="mobile-loading-shell__metric">
+                <span>{metric.label}</span>
+                <strong>{metric.value}</strong>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mobile-loading-shell__card">
+        <div className="mobile-loading-shell__pulse">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="mobile-loading-shell__typewriter">
+          {typed}
+          <span className="mobile-loading-shell__cursor" />
+        </div>
+        <div className="mobile-loading-shell__track" aria-hidden="true">
+          <div className="mobile-loading-shell__fill" />
+        </div>
+      </div>
+    </section>
+  )
+}

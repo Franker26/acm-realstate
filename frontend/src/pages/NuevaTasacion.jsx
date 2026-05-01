@@ -78,7 +78,13 @@ export default function NuevaTasacion() {
   const { id } = useParams()
   const location = useLocation()
   const preselectedTipo = location.state?.tipo || ''
-  const [values, setValues] = useState({ ...EMPTY, tipo: preselectedTipo })
+  const quickDraft = location.state?.quickDraft || null
+  const [values, setValues] = useState({
+    ...EMPTY,
+    tipo: preselectedTipo,
+    nombre: quickDraft?.nombre || '',
+    direccion: quickDraft?.direccion || '',
+  })
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [apiError, setApiError] = useState(null)

@@ -211,6 +211,9 @@ function AppHeader() {
   }
 
   if (location.pathname === '/login' || location.pathname.startsWith('/admin')) return null
+  const isHomeRoute = location.pathname === '/'
+  const isApprovalsRoute = location.pathname === '/approvals'
+  const isSettingsRoute = location.pathname === '/settings'
 
   const navItems = [
     { to: '/', label: 'Tablero', visible: true },
@@ -219,7 +222,7 @@ function AppHeader() {
   ].filter((item) => item.visible)
 
   return (
-    <header className="app-header">
+    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute ? ' app-header--home-mobile-hidden' : ''}`}>
       <div className="app-header__shell">
         <div className="app-header__left">
           <Link to="/" className="app-title">
