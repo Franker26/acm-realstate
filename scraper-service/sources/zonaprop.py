@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from fastapi import HTTPException
 
 from .base import BaseSource
+from . import browser as _browser
 
 _TIPO_MAP = {
     "departamento": "Departamento",
@@ -216,15 +217,23 @@ class ZonapropSource(BaseSource):
         return "zonaprop.com.ar" in url
 
     async def extract(self, url: str, client: httpx.AsyncClient) -> dict:
+        html: str | None = None
         try:
             r = await client.get(url)
-            r.raise_for_status()
+            if r.status_code == 403:
+                # Bot detection — fall back to headless browser
+                html = await _browser.fetch_rendered(url)
+            else:
+                r.raise_for_status()
+                html = r.text
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(502, f"Error al acceder a Zonaprop: {e}")
 
-        result = _parse_next_data(r.text)
+        result = _parse_next_data(html)
         if not result:
-            result = _parse_html(r.text)
+            result = _parse_html(html)
         if not result:
             raise HTTPException(422, "No se pudieron extraer datos de Zonaprop")
         return result
