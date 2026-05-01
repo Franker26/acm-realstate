@@ -169,12 +169,17 @@ function getContext(factorKey, comp, acm) {
   }
 }
 
-function FactorSlider({ factorKey, label, tooltip, value, recommendation, context, onChange }) {
+function FactorSlider({ factorKey, label, tooltip, value, recommendation, context, onChange, inputMode = 'slider' }) {
   const sliderVal = factorToSlider(value)
   const range = MAX_SLIDER - MIN_SLIDER
   const recPct = recommendation != null
     ? ((factorToSlider(recommendation) - MIN_SLIDER) / range) * 100
     : null
+
+  function stepValue(delta) {
+    const next = Math.max(MIN_SLIDER / 100, Math.min(MAX_SLIDER / 100, parseFloat((value + delta).toFixed(3))))
+    onChange(factorKey, next)
+  }
 
   return (
     <div className="factor-row">
@@ -186,30 +191,71 @@ function FactorSlider({ factorKey, label, tooltip, value, recommendation, contex
           </Tooltip>
         )}
       </span>
+
       <div className="factor-row-track-wrap">
-        <div className="factor-row-track">
-          <input
-            type="range"
-            min={MIN_SLIDER}
-            max={MAX_SLIDER}
-            step={1}
-            value={sliderVal}
-            onChange={(e) => onChange(factorKey, sliderToFactor(Number(e.target.value)))}
-            style={getTrackStyle(sliderVal)}
-            className="factor-slider"
-          />
-        </div>
-        {recPct != null && (
-          <div className="rec-bar">
-            <div
-              className="rec-needle"
-              style={{ left: `${recPct}%` }}
-              title={`Recomendado por sistema: ${recommendation.toFixed(3)} (${Math.round((recommendation-1)*100) >= 0 ? '+' : ''}${Math.round((recommendation-1)*100)}%)`}
+        {inputMode === 'slider' && (
+          <>
+            <div className="factor-row-track">
+              <input
+                type="range"
+                min={MIN_SLIDER}
+                max={MAX_SLIDER}
+                step={1}
+                value={sliderVal}
+                onChange={(e) => onChange(factorKey, sliderToFactor(Number(e.target.value)))}
+                style={getTrackStyle(sliderVal)}
+                className="factor-slider"
+              />
+            </div>
+            {recPct != null && (
+              <div className="rec-bar">
+                <div
+                  className="rec-needle"
+                  style={{ left: `${recPct}%` }}
+                  title={`Recomendado: ${recommendation.toFixed(3)} (${Math.round((recommendation-1)*100) >= 0 ? '+' : ''}${Math.round((recommendation-1)*100)}%)`}
+                />
+              </div>
+            )}
+          </>
+        )}
+
+        {inputMode === 'arrows' && (
+          <div className="factor-arrows">
+            <button type="button" className="factor-arrow-btn" onClick={() => stepValue(-0.01)}>↓</button>
+            <input
+              type="number"
+              className="factor-arrow-input"
+              step="0.01"
+              min={MIN_SLIDER / 100}
+              max={MAX_SLIDER / 100}
+              value={value.toFixed(3)}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value)
+                if (!isNaN(v)) onChange(factorKey, Math.max(MIN_SLIDER / 100, Math.min(MAX_SLIDER / 100, v)))
+              }}
             />
+            <button type="button" className="factor-arrow-btn" onClick={() => stepValue(+0.01)}>↑</button>
           </div>
         )}
+
+        {inputMode === 'numeric' && (
+          <input
+            type="number"
+            className="factor-numeric-input"
+            step="0.001"
+            min={MIN_SLIDER / 100}
+            max={MAX_SLIDER / 100}
+            value={value.toFixed(3)}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value)
+              if (!isNaN(v)) onChange(factorKey, Math.max(MIN_SLIDER / 100, Math.min(MAX_SLIDER / 100, v)))
+            }}
+          />
+        )}
+
         {context && <div className="factor-context">{context}</div>}
       </div>
+
       <span className="factor-row-pct">{pctLabel(sliderVal)}</span>
       <span className="factor-row-val">{value.toFixed(3)}</span>
     </div>
@@ -227,7 +273,7 @@ function totalBadgeStyle(total) {
   return { background: '#fce4ec', color: '#c62828', border: '1px solid #ef9a9a' }
 }
 
-function ComparableCard({ comp, acm, factors, recommendations, advancedMode, onChange }) {
+function ComparableCard({ comp, acm, factors, recommendations, advancedMode, inputMode, onChange }) {
   const precioM2 = comp.precio_m2_publicado ?? (comp.precio / comp.superficie_cubierta)
   const visibleFactors = advancedMode ? ALL_FACTORS : BASE_FACTORS
   const total = factorTotal(factors, visibleFactors)
@@ -267,6 +313,7 @@ function ComparableCard({ comp, acm, factors, recommendations, advancedMode, onC
             recommendation={recommendations?.[f.key]}
             context={getContext(f.key, comp, acm)}
             onChange={onChange}
+            inputMode={inputMode}
           />
         ))}
       </div>
@@ -281,6 +328,14 @@ export default function AplicarPonderadores() {
   const [factorMap, setFactorMap] = useState({})
   const [recommendMap, setRecommendMap] = useState({})
   const [advancedMode, setAdvancedMode] = useState(false)
+  const [inputMode, setInputMode] = useState(
+    () => localStorage.getItem('acm_factor_input_mode') || 'slider'
+  )
+
+  function handleInputModeChange(mode) {
+    setInputMode(mode)
+    localStorage.setItem('acm_factor_input_mode', mode)
+  }
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -383,6 +438,26 @@ export default function AplicarPonderadores() {
 
       <div className="workflow-toolbar">
         <div className="workflow-toolbar__group">
+          <span className="workflow-toolbar__label">Vista</span>
+          <div className="factor-mode-switcher">
+            {[
+              { key: 'slider', title: 'Sliders', icon: '⟺' },
+              { key: 'arrows', title: 'Flechas + número', icon: '↕' },
+              { key: 'numeric', title: 'Número libre', icon: '#' },
+            ].map(({ key, title, icon }) => (
+              <button
+                key={key}
+                type="button"
+                title={title}
+                className={`factor-mode-btn${inputMode === key ? ' is-active' : ''}`}
+                onClick={() => handleInputModeChange(key)}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="workflow-toolbar__group">
           <span className="workflow-toolbar__label">Modo</span>
           <button
             className={`btn btn-sm ${advancedMode ? 'btn-primary' : 'btn-secondary'}`}
@@ -427,6 +502,7 @@ export default function AplicarPonderadores() {
           factors={factorMap[comp.id] || {}}
           recommendations={recommendMap[comp.id] || {}}
           advancedMode={advancedMode}
+          inputMode={inputMode}
           onChange={(factorKey, value) => handleChange(comp.id, factorKey, value)}
         />
       ))}
