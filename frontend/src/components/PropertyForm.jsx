@@ -58,13 +58,18 @@ export default function PropertyForm({ values, onChange, errors = {}, hideTipo =
 
         {homo > 0 && (
           <div className="form-group full">
-            <div className="surface-computed">
-              Sup. homogeneizada: <strong>{homo.toFixed(2)} m²</strong>
-              <span className="surface-computed-formula">
-                {' '}= {(parseFloat(values.superficie_cubierta)||0).toFixed(2)}
-                {parseFloat(values.superficie_semicubierta) > 0 ? ` + 0.5×${parseFloat(values.superficie_semicubierta).toFixed(2)}` : ''}
-                {parseFloat(values.superficie_descubierta) > 0 ? ` + 0.3×${parseFloat(values.superficie_descubierta).toFixed(2)}` : ''}
-              </span>
+            <div className="surface-computed-row">
+              <div className="surface-computed">
+                Sup. total: <strong>{((parseFloat(values.superficie_cubierta)||0) + (parseFloat(values.superficie_semicubierta)||0) + (parseFloat(values.superficie_descubierta)||0)).toFixed(2)} m²</strong>
+              </div>
+              <div className="surface-computed">
+                Sup. homogeneizada: <strong>{homo.toFixed(2)} m²</strong>
+                <span className="surface-computed-formula">
+                  {' '}= {(parseFloat(values.superficie_cubierta)||0).toFixed(2)}
+                  {parseFloat(values.superficie_semicubierta) > 0 ? ` + 0.5×${parseFloat(values.superficie_semicubierta).toFixed(2)}` : ''}
+                  {parseFloat(values.superficie_descubierta) > 0 ? ` + 0.3×${parseFloat(values.superficie_descubierta).toFixed(2)}` : ''}
+                </span>
+              </div>
             </div>
           </div>
         )}
