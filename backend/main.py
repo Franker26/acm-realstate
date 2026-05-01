@@ -4,6 +4,9 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+load_dotenv()
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -202,12 +205,17 @@ async def lifespan(app: FastAPI):
                 ))
         db.commit()
 
-        # 5. Bootstrap superadmin from env vars (only if none exists)
+        # 5. Bootstrap superadmin from env vars (only if username doesn't exist yet)
         sa_user = os.getenv("SUPERADMIN_USERNAME")
         sa_pass = os.getenv("SUPERADMIN_PASSWORD")
         if sa_user and sa_pass:
-            exists = db.query(User).filter(User.is_superadmin.is_(True)).first()
-            if not exists:
+            existing = db.query(User).filter(User.username == sa_user).first()
+            if existing:
+                if not existing.is_superadmin:
+                    existing.is_superadmin = True
+                    existing.hashed_password = _hash_password(sa_pass)
+                    db.commit()
+            else:
                 db.add(User(
                     username=sa_user,
                     hashed_password=_hash_password(sa_pass),

@@ -2,6 +2,9 @@ import enum
 import os
 from datetime import datetime
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from sqlalchemy import (
     Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, create_engine
 )
