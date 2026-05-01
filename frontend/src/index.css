@@ -1428,6 +1428,12 @@ tr:hover td { background: #f8fafc; }
 }
 
 /* Homogeneizada computed display */
+.surface-computed-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .surface-computed {
   background: var(--primary-light);
   border: 1px solid #c5d9ef;
