@@ -222,7 +222,7 @@ function AppHeader() {
   ].filter((item) => item.visible)
 
   return (
-    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute ? ' app-header--home-mobile-hidden' : ''}`}>
+    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
       <div className="app-header__shell">
         <div className="app-header__left">
           <Link to="/" className="app-title">
