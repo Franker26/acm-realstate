@@ -43,6 +43,7 @@ from models import (
     Comparable,
     Company,
     CompanySetting,
+    ModifierOption,
     PlatformSetting,
     SessionLocal,
     StageACM,
@@ -113,6 +114,9 @@ from schemas import (
     CompanyCreate,
     CompanyRead,
     CompanyUpdate,
+    ModifierOptionCreate,
+    ModifierOptionRead,
+    ModifierOptionUpdate,
     PonderadoresDefaults,
     ResultadoResponse,
     StageUpdateRequest,
@@ -906,6 +910,57 @@ def get_resultado(acm_id: int, request: Request, db: Session = Depends(get_db)):
 @app.get("/api/ponderadores/defaults", response_model=PonderadoresDefaults)
 def get_defaults():
     return PonderadoresDefaults(**calc.DEFAULTS)
+
+
+# --- Modifier options ---
+
+@app.get("/api/modifiers", response_model=list[ModifierOptionRead])
+def list_modifiers(request: Request, db: Session = Depends(get_db)):
+    current = _current_user(request, db)
+    return (
+        db.query(ModifierOption)
+        .filter(ModifierOption.company_id == current.company_id)
+        .order_by(ModifierOption.factor_key, ModifierOption.option_label)
+        .all()
+    )
+
+
+@app.post("/api/modifiers", response_model=ModifierOptionRead, status_code=201)
+def create_modifier(body: ModifierOptionCreate, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    obj = ModifierOption(**body.model_dump(), company_id=current.company_id)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.put("/api/modifiers/{mid}", response_model=ModifierOptionRead)
+def update_modifier(mid: int, body: ModifierOptionUpdate, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    obj = db.query(ModifierOption).filter(
+        ModifierOption.id == mid, ModifierOption.company_id == current.company_id
+    ).first()
+    if not obj:
+        raise HTTPException(404, "Modificador no encontrado")
+    for k, v in body.model_dump(exclude_none=True).items():
+        setattr(obj, k, v)
+    obj.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.delete("/api/modifiers/{mid}", status_code=204)
+def delete_modifier(mid: int, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    obj = db.query(ModifierOption).filter(
+        ModifierOption.id == mid, ModifierOption.company_id == current.company_id
+    ).first()
+    if not obj:
+        raise HTTPException(404, "Modificador no encontrado")
+    db.delete(obj)
+    db.commit()
 
 
 # --- Integrations ---
