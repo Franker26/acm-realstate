@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, updateACM } from '../api.js'
 import { useAuth, useWizard } from '../App.jsx'
-import { LoadingState, StateCard } from '../components/StatusState.jsx'
+import { MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
 
 const COLUMNS = [
   { key: 'nuevo', title: 'Nuevo', description: 'Tasaciones recién creadas o pendientes de completar.', tone: 'blue' },
@@ -92,6 +92,10 @@ export default function Home() {
   const [dragOverCol, setDragOverCol] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const [quickDraft, setQuickDraft] = useState({ nombre: '', direccion: '' })
+  const [quickErrors, setQuickErrors] = useState({})
+  const [routeTransition, setRouteTransition] = useState(null)
   const { dispatch } = useWizard()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -169,8 +173,40 @@ export default function Home() {
     navigate('/acm/tipo')
   }
 
+  function handleQuickDraftChange(key, value) {
+    setQuickDraft((prev) => ({ ...prev, [key]: value }))
+    setQuickErrors((prev) => ({ ...prev, [key]: undefined }))
+  }
+
+  function handleQuickCreate() {
+    const nextErrors = {}
+    if (!quickDraft.nombre.trim()) nextErrors.nombre = 'Requerido'
+    if (!quickDraft.direccion.trim()) nextErrors.direccion = 'Requerido'
+    if (Object.keys(nextErrors).length) {
+      setQuickErrors(nextErrors)
+      return
+    }
+    dispatch({ type: 'RESET' })
+    setQuickCreateOpen(false)
+    navigate('/acm/new', {
+      state: {
+        tipo: 'Departamento',
+        quickDraft: {
+          nombre: quickDraft.nombre.trim(),
+          direccion: quickDraft.direccion.trim(),
+        },
+      },
+    })
+  }
+
   function handleMobileNavigate(path) {
     setMobileDrawerOpen(false)
+    const isDashboardSwap = path === '/approvals' || path === '/'
+    if (isDashboardSwap) {
+      setRouteTransition(path === '/approvals' ? 'approvals' : 'dashboard')
+      window.setTimeout(() => navigate(path), 140)
+      return
+    }
     navigate(path)
   }
 
@@ -178,6 +214,32 @@ export default function Home() {
     setMobileDrawerOpen(false)
     logout()
     navigate('/login')
+  }
+
+  if (routeTransition) {
+    return (
+      <MobileWorkspaceLoading
+        eyebrow="Cambiando de vista"
+        title={routeTransition === 'approvals' ? 'Abriendo aprobaciones' : 'Volviendo al dashboard'}
+        subtitle={routeTransition === 'approvals'
+          ? 'Preparamos la cola rápida con las tasaciones pendientes para revisar desde el celular.'
+          : 'Estamos restaurando el tablero operativo con tus ACMs, métricas y accesos rápidos.'}
+        messages={routeTransition === 'approvals'
+          ? ['Entrando a aprobaciones...', 'Buscando tasaciones pendientes...', 'Preparando revisión rápida...']
+          : ['Volviendo al dashboard...', 'Sincronizando tasaciones...', 'Ordenando el tablero móvil...']}
+        metrics={routeTransition === 'approvals'
+          ? [
+              { label: 'Pendientes', value: mobileOverview.pendingApprovals },
+              { label: 'Activos', value: mobileOverview.inFlight },
+              { label: 'Workspace', value: 'Mobile' },
+            ]
+          : [
+              { label: 'Activos', value: mobileOverview.inFlight },
+              { label: 'Pendientes', value: mobileOverview.pendingApprovals },
+              { label: 'Finalizados', value: mobileOverview.completed },
+            ]}
+      />
+    )
   }
 
   async function handleDelete(id, nombre) {
@@ -275,11 +337,16 @@ export default function Home() {
       </div>
 
       {loading && (
-        <LoadingState
+        <MobileWorkspaceLoading
           eyebrow="Carga de panel"
-          title="Estamos preparando el tablero"
-          subtitle="Sincronizamos tasaciones, métricas y etapas del equipo."
+          title="Estamos preparando el dashboard"
+          subtitle="Sincronizamos tasaciones, métricas y etapas del equipo para que el tablero abra listo en mobile."
           messages={['Cargando tablero...', 'Preparando workspace...', 'Sincronizando datos...']}
+          metrics={[
+            { label: 'Vista', value: 'Mobile' },
+            { label: 'Flujo', value: 'ACMs' },
+            { label: 'Estado', value: 'Sync' },
+          ]}
         />
       )}
 
@@ -297,6 +364,50 @@ export default function Home() {
       {!loading && !error && (
         <>
           <section className="home-mobile-shell">
+            <button
+              type="button"
+              className={`home-mobile-modal-backdrop${quickCreateOpen ? ' is-open' : ''}`}
+              onClick={() => setQuickCreateOpen(false)}
+              aria-label="Cerrar alta rápida"
+            />
+
+            <div className={`home-mobile-quick-modal${quickCreateOpen ? ' is-open' : ''}`} aria-hidden={!quickCreateOpen}>
+              <div className="home-mobile-quick-modal__header">
+                <div>
+                  <span className="home-mobile-section-label">Tasación rápida</span>
+                  <strong>Creá el ACM con lo mínimo</strong>
+                </div>
+                <button type="button" className="home-mobile-quick-modal__close" onClick={() => setQuickCreateOpen(false)}>
+                  ×
+                </button>
+              </div>
+              <div className="home-mobile-quick-modal__body">
+                <label className="home-mobile-quick-field">
+                  <span>Nombre</span>
+                  <input
+                    type="text"
+                    value={quickDraft.nombre}
+                    onChange={(e) => handleQuickDraftChange('nombre', e.target.value)}
+                    placeholder="Ej: Av. Libertador 2450"
+                  />
+                  {quickErrors.nombre && <small>{quickErrors.nombre}</small>}
+                </label>
+                <label className="home-mobile-quick-field">
+                  <span>Dirección</span>
+                  <input
+                    type="text"
+                    value={quickDraft.direccion}
+                    onChange={(e) => handleQuickDraftChange('direccion', e.target.value)}
+                    placeholder="Ej: Av. Libertador 2450, CABA"
+                  />
+                  {quickErrors.direccion && <small>{quickErrors.direccion}</small>}
+                </label>
+              </div>
+              <button type="button" className="btn btn-primary home-mobile-quick-modal__submit" onClick={handleQuickCreate}>
+                Continuar con tasación rápida
+              </button>
+            </div>
+
             <button
               type="button"
               className={`home-mobile-drawer-backdrop${mobileDrawerOpen ? ' is-open' : ''}`}
@@ -338,47 +449,58 @@ export default function Home() {
               </div>
             </aside>
 
-            <header className="home-mobile-header">
-              <button
-                type="button"
-                className="home-mobile-user-trigger"
-                onClick={() => setMobileDrawerOpen(true)}
-                aria-expanded={mobileDrawerOpen}
-                aria-label="Abrir panel de usuario"
-              >
-                <span className="home-mobile-user-trigger__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
-                  {initials(user?.username || 'Usuario')}
-                </span>
-                <span className="home-mobile-user-trigger__name">{user?.username || 'Usuario'}</span>
-              </button>
-              <div className="home-mobile-brand-lockup">
-                <span className="home-mobile-brand-lockup__mark">R</span>
-                <strong>Reval</strong>
-              </div>
-            </header>
+            <section className="home-mobile-topband">
+              <header className="home-mobile-header">
+                <button
+                  type="button"
+                  className="home-mobile-user-trigger"
+                  onClick={() => setMobileDrawerOpen(true)}
+                  aria-expanded={mobileDrawerOpen}
+                  aria-label="Abrir panel de usuario"
+                >
+                  <span className="home-mobile-user-trigger__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
+                    {initials(user?.username || 'Usuario')}
+                  </span>
+                  <span className="home-mobile-user-trigger__body">
+                    <span className="home-mobile-user-trigger__name">{user?.username || 'Usuario'}</span>
+                    <span className="home-mobile-user-trigger__meta">Workspace Reval</span>
+                  </span>
+                </button>
+                <div className="home-mobile-header__utilities">
+                  {user?.is_approver && (
+                    <button type="button" className="home-mobile-utility-pill" onClick={() => handleMobileNavigate('/approvals')}>
+                      Aprobaciones
+                    </button>
+                  )}
+                  <button type="button" className="home-mobile-utility-icon" onClick={() => setMobileDrawerOpen(true)} aria-label="Abrir perfil">
+                    ≡
+                  </button>
+                </div>
+              </header>
 
-            <section className="home-mobile-overview">
-              <span className="home-mobile-overview__eyebrow">Resumen operativo</span>
-              <h1>{greeting()}{user?.username ? `, ${user.username}` : ''}</h1>
-              <p>
-                {mobileOverview.total > 0
-                  ? `Tenés ${mobileOverview.inFlight} ACM activos y ${mobileOverview.pendingApprovals} pendiente${mobileOverview.pendingApprovals === 1 ? '' : 's'} de aprobación.`
-                  : 'Todavía no hay ACMs activos para seguir desde el celular.'}
-              </p>
-              <div className="home-mobile-overview__metrics">
-                <article className="home-mobile-metric-card">
-                  <span>Activos</span>
-                  <strong>{mobileOverview.inFlight}</strong>
-                </article>
-                <article className="home-mobile-metric-card">
-                  <span>Pendientes</span>
-                  <strong>{mobileOverview.pendingApprovals}</strong>
-                </article>
-                <article className="home-mobile-metric-card">
-                  <span>Finalizados</span>
-                  <strong>{mobileOverview.completed}</strong>
-                </article>
-              </div>
+              <section className="home-mobile-overview">
+                <span className="home-mobile-overview__eyebrow">Resumen operativo</span>
+                <h1>{greeting()}{user?.username ? `, ${user.username}` : ''}</h1>
+                <p>
+                  {mobileOverview.total > 0
+                    ? `Tenés ${mobileOverview.inFlight} ACM activos y ${mobileOverview.pendingApprovals} pendiente${mobileOverview.pendingApprovals === 1 ? '' : 's'} de aprobación.`
+                    : 'Todavía no hay ACMs activos para seguir desde el celular.'}
+                </p>
+                <div className="home-mobile-overview__metrics">
+                  <article className="home-mobile-metric-card">
+                    <span>Activos</span>
+                    <strong>{mobileOverview.inFlight}</strong>
+                  </article>
+                  <article className="home-mobile-metric-card">
+                    <span>Pendientes</span>
+                    <strong>{mobileOverview.pendingApprovals}</strong>
+                  </article>
+                  <article className="home-mobile-metric-card">
+                    <span>Finalizados</span>
+                    <strong>{mobileOverview.completed}</strong>
+                  </article>
+                </div>
+              </section>
             </section>
 
             <section className="home-mobile-carousel-block">
@@ -387,7 +509,6 @@ export default function Home() {
                   <span className="home-mobile-section-label">ACMs</span>
                   <strong>Deslizá y retomá rápido</strong>
                 </div>
-                <span className="home-mobile-pill-count">{spotlightAcms.length}</span>
               </div>
 
               {spotlightAcms.length > 0 ? (
@@ -479,16 +600,8 @@ export default function Home() {
             </section>
 
             <nav className="home-mobile-dock" aria-label="Acciones rápidas">
-              {user?.is_approver && (
-                <button type="button" className="home-mobile-dock__item" onClick={() => handleMobileNavigate('/approvals')}>
-                  Aprobaciones
-                </button>
-              )}
-              <button type="button" className="home-mobile-dock__primary" onClick={handleNew}>
-                + ACM rápido
-              </button>
-              <button type="button" className="home-mobile-dock__item" onClick={() => setMobileDrawerOpen(true)}>
-                Perfil
+              <button type="button" className="home-mobile-dock__primary home-mobile-dock__primary--solo" onClick={() => setQuickCreateOpen(true)}>
+                + Tasación rápida
               </button>
             </nav>
           </section>
@@ -502,8 +615,6 @@ export default function Home() {
               </article>
             ))}
           </section>
-
-          <div className="home-mobile-section-label">Recientes</div>
 
           <div className="kanban-board home-desktop-board">
             {COLUMNS.map((column) => {
