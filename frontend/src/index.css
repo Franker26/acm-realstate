@@ -126,6 +126,9 @@ body {
   background: rgba(244, 246, 250, 0.92);
   backdrop-filter: blur(10px);
   padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .status-shell {
