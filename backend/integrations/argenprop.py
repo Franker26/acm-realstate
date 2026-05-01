@@ -4,11 +4,9 @@ from fastapi import HTTPException
 from .base import BaseAdapter
 
 
-class MercadoLibreAdapter(BaseAdapter):
+class ArgenpropAdapter(BaseAdapter):
     def can_handle(self, url: str) -> bool:
-        return "mercadolibre.com.ar" in url or (
-            "mercadolibre.com" in url and "MLA" in url
-        )
+        return "argenprop.com" in url
 
     async def extract(self, url: str, settings: dict) -> dict:
         scraper_url = settings.get("scraper_service_url")
@@ -29,4 +27,4 @@ class MercadoLibreAdapter(BaseAdapter):
         except HTTPException:
             raise
         except Exception as e:
-            raise HTTPException(502, f"Scraper de MercadoLibre no disponible: {e}")
+            raise HTTPException(502, f"Scraper de Argenprop no disponible: {e}")

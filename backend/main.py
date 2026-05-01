@@ -43,6 +43,7 @@ from models import (
     Comparable,
     Company,
     CompanySetting,
+    PlatformSetting,
     SessionLocal,
     StageACM,
     User,
@@ -125,16 +126,20 @@ from schemas import (
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
-        # Postgres-specific column migrations (no-ops on SQLite if column exists)
+        # Column migrations — each statement is tried individually.
+        # "duplicate column" errors are caught and ignored (idempotent).
+        # IF NOT EXISTS is omitted for SQLite compatibility.
         for stmt in (
-            "ALTER TABLE acm ALTER COLUMN stage TYPE VARCHAR USING stage::text",
-            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS current_step VARCHAR DEFAULT 'sujeto'",
-            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS steps_completed VARCHAR DEFAULT '[]'",
-            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
-            # Multi-tenant columns
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superadmin BOOLEAN DEFAULT FALSE",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id INTEGER",
-            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS company_id INTEGER",
+            "ALTER TABLE acm ALTER COLUMN stage TYPE VARCHAR USING stage::text",  # PG only, ignored on SQLite
+            "ALTER TABLE acm ADD COLUMN current_step VARCHAR DEFAULT 'sujeto'",
+            "ALTER TABLE acm ADD COLUMN steps_completed VARCHAR DEFAULT '[]'",
+            "ALTER TABLE acm ADD COLUMN deleted_at TIMESTAMP",
+            "ALTER TABLE users ADD COLUMN is_superadmin BOOLEAN DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN company_id INTEGER",
+            "ALTER TABLE acm ADD COLUMN company_id INTEGER",
+            "ALTER TABLE acm ADD COLUMN approval_status VARCHAR DEFAULT 'No requerida'",
+            "ALTER TABLE acm ADD COLUMN approved_by_id INTEGER",
+            "ALTER TABLE acm ADD COLUMN approved_at TIMESTAMP",
         ):
             try:
                 db.execute(text(stmt))
@@ -326,6 +331,28 @@ def _save_company_setting(db: Session, company_id: int, key: str, value: str) ->
     db.commit()
 
 
+def _get_platform_setting(db: Session, key: str) -> Optional[str]:
+    s = db.query(PlatformSetting).filter(PlatformSetting.key == key).first()
+    return s.value if s else None
+
+
+def _save_platform_setting(db: Session, key: str, value: str) -> None:
+    s = db.query(PlatformSetting).filter(PlatformSetting.key == key).first()
+    if not s:
+        s = PlatformSetting(key=key)
+        db.add(s)
+    s.value = value
+    db.commit()
+
+
+def _get_scraper_settings(db: Session) -> dict:
+    """Read global scraper settings with env var fallback."""
+    return {
+        "scraper_service_url": _get_platform_setting(db, "scraper_service_url") or _SCRAPER_SERVICE_URL,
+        "scraper_service_token": _get_platform_setting(db, "scraper_service_token") or _SCRAPER_SERVICE_TOKEN,
+    }
+
+
 def _serialize_user(user: User) -> UserRead:
     return UserRead(
         id=user.id,
@@ -446,141 +473,23 @@ def update_branding_settings(body: BrandingSettings, request: Request, db: Sessi
     return _get_branding_settings(db, current.company_id)
 
 
-class IntegrationSettings(PydanticBase):
-    scraper_service_url: Optional[str] = None
-    scraper_service_token: Optional[str] = None
-    ml_app_id: Optional[str] = None
-    ml_app_secret: Optional[str] = None
-    ml_connected: bool = False
-    ml_user_nickname: Optional[str] = None
+_SENSITIVE_SETTING_KEYS = {"scraper_service_token"}
 
 
-_INTEGRATION_KEYS = ["scraper_service_url", "scraper_service_token", "ml_app_id", "ml_app_secret"]
-_ML_TOKEN_KEYS = ["ml_access_token", "ml_refresh_token", "ml_token_expires_at", "ml_user_nickname"]
-_ML_REDIRECT_URI = os.getenv(
-    "ML_REDIRECT_URI",
-    "https://app.reval.com.ar/ml-callback",
-)
-
-
-def _get_integration_settings_dict(db: Session, company_id: int) -> dict:
-    env_fallback = {"scraper_service_url": _SCRAPER_SERVICE_URL, "scraper_service_token": _SCRAPER_SERVICE_TOKEN}
-    payload = {}
-    for key in _INTEGRATION_KEYS + _ML_TOKEN_KEYS:
-        val = _get_company_setting(db, company_id, key)
-        payload[key] = (val if val else None) or env_fallback.get(key)
-    return payload
-
-
-@app.get("/api/settings/integrations", response_model=IntegrationSettings)
-def get_integration_settings(request: Request, db: Session = Depends(get_db)):
-    current = _require_admin(request, db)
-    raw = _get_integration_settings_dict(db, current.company_id)
-    return IntegrationSettings(
-        scraper_service_url=raw.get("scraper_service_url"),
-        scraper_service_token="***" if raw.get("scraper_service_token") else None,
-        ml_app_id=raw.get("ml_app_id"),
-        ml_app_secret="***" if raw.get("ml_app_secret") else None,
-        ml_connected=bool(raw.get("ml_access_token")),
-        ml_user_nickname=raw.get("ml_user_nickname") or None,
-    )
-
-
-@app.put("/api/settings/integrations", response_model=IntegrationSettings)
-def update_integration_settings(body: IntegrationSettings, request: Request, db: Session = Depends(get_db)):
-    current = _require_admin(request, db)
-    for key, value in body.model_dump().items():
-        if key in ("ml_connected", "ml_user_nickname"):
-            continue
-        if value == "***":
-            continue
-        _save_company_setting(db, current.company_id, key, value or "")
-    return get_integration_settings(request, db)
-
-
-@app.get("/api/settings/integrations/ml-auth-url")
-def ml_auth_url(request: Request, db: Session = Depends(get_db)):
-    import urllib.parse
-    current = _require_admin(request, db)
-    raw = _get_integration_settings_dict(db, current.company_id)
-    app_id = raw.get("ml_app_id")
-    if not app_id:
-        raise HTTPException(400, "Configurá el App ID de MercadoLibre primero.")
-    url = (
-        "https://auth.mercadolibre.com.ar/authorization"
-        f"?response_type=code"
-        f"&client_id={app_id}"
-        f"&redirect_uri={urllib.parse.quote(_ML_REDIRECT_URI, safe='')}"
-    )
-    return {"url": url}
-
-
-class MlExchangeRequest(PydanticBase):
-    code: str
-
-
-@app.post("/api/settings/integrations/ml-exchange")
-async def ml_exchange_code(body: MlExchangeRequest, request: Request, db: Session = Depends(get_db)):
-    import time as _time
-    current = _require_admin(request, db)
-    raw = _get_integration_settings_dict(db, current.company_id)
-    app_id = raw.get("ml_app_id")
-    secret = raw.get("ml_app_secret")
-    if not app_id or not secret:
-        raise HTTPException(400, "Configurá App ID y Secret de MercadoLibre primero.")
-
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.post(
-            "https://api.mercadolibre.com/oauth/token",
-            data={
-                "grant_type": "authorization_code",
-                "client_id": app_id,
-                "client_secret": secret,
-                "code": body.code,
-                "redirect_uri": _ML_REDIRECT_URI,
-            },
-        )
-    if r.status_code != 200:
-        raise HTTPException(502, f"Error intercambiando código con MercadoLibre: {r.text}")
-
-    data = r.json()
-    access_token = data["access_token"]
-    refresh_token_val = data.get("refresh_token", "")
-    expires_at = str(_time.time() + data.get("expires_in", 21600))
-    user_id = str(data.get("user_id", ""))
-
-    nickname = user_id
-    if user_id:
-        async with httpx.AsyncClient(timeout=10) as client:
-            ru = await client.get(
-                f"https://api.mercadolibre.com/users/{user_id}",
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-            if ru.status_code == 200:
-                nickname = ru.json().get("nickname", user_id)
-
-    for key, value in [
-        ("ml_access_token", access_token),
-        ("ml_refresh_token", refresh_token_val),
-        ("ml_token_expires_at", expires_at),
-        ("ml_user_nickname", nickname),
-    ]:
-        _save_company_setting(db, current.company_id, key, value)
-
-    return {"status": "connected", "nickname": nickname}
-
-
-@app.delete("/api/settings/integrations/ml-disconnect")
-def ml_disconnect(request: Request, db: Session = Depends(get_db)):
-    current = _require_admin(request, db)
-    for key in ["ml_access_token", "ml_refresh_token", "ml_token_expires_at", "ml_user_nickname"]:
-        _save_company_setting(db, current.company_id, key, "")
-    return {"status": "disconnected"}
-
-
-_SENSITIVE_SETTING_KEYS = {
-    "ml_app_secret", "ml_access_token", "ml_refresh_token", "scraper_service_token"
-}
+@app.get("/api/settings/integrations/status")
+def get_integration_status(request: Request, db: Session = Depends(get_db)):
+    """Return connection status for each source (clients can see this, no credentials)."""
+    _current_user(request, db)
+    scraper = _get_scraper_settings(db)
+    scraper_url = scraper.get("scraper_service_url", "").strip() if scraper.get("scraper_service_url") else ""
+    return {
+        "scraper_configured": bool(scraper_url),
+        "sources": [
+            {"name": "Zonaprop", "key": "zonaprop", "available": bool(scraper_url)},
+            {"name": "Argenprop", "key": "argenprop", "available": bool(scraper_url)},
+            {"name": "MercadoLibre", "key": "mercadolibre", "available": bool(scraper_url)},
+        ],
+    }
 
 
 @app.get("/api/settings/params")
@@ -1012,9 +921,8 @@ class ExtractRequest(PydanticBase):
 @app.post("/api/extract")
 async def extract_property(body: ExtractRequest, request: Request, db: Session = Depends(get_db)):
     from integrations import extract as integration_extract
-    current = _current_user(request, db)
-    settings = _get_integration_settings_dict(db, current.company_id)
-    settings["_save_setting"] = lambda key, value: _save_company_setting(db, current.company_id, key, value)
+    _current_user(request, db)
+    settings = _get_scraper_settings(db)
     return await integration_extract(body.url.strip(), settings)
 
 
@@ -1186,6 +1094,57 @@ def admin_list_company_acms(company_id: int, request: Request, db: Session = Dep
         s.requires_approval = _requires_approval(acm)
         result.append(s)
     return result
+
+
+# ── Admin integration settings ────────────────────────────────────────────────
+
+class GlobalIntegrationSettings(PydanticBase):
+    scraper_service_url: Optional[str] = None
+    scraper_service_token: Optional[str] = None
+
+
+@app.get("/api/admin/settings/integrations")
+def admin_get_integration_settings(request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    raw = _get_scraper_settings(db)
+    return GlobalIntegrationSettings(
+        scraper_service_url=raw.get("scraper_service_url"),
+        scraper_service_token="***" if raw.get("scraper_service_token") else None,
+    )
+
+
+@app.put("/api/admin/settings/integrations")
+def admin_update_integration_settings(body: GlobalIntegrationSettings, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    if body.scraper_service_url is not None:
+        _save_platform_setting(db, "scraper_service_url", body.scraper_service_url.strip())
+    if body.scraper_service_token is not None and body.scraper_service_token != "***":
+        _save_platform_setting(db, "scraper_service_token", body.scraper_service_token.strip())
+    return admin_get_integration_settings(request, db)
+
+
+@app.get("/api/admin/settings/integrations/status")
+async def admin_integration_status(request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    raw = _get_scraper_settings(db)
+    scraper_url = (raw.get("scraper_service_url") or "").strip()
+
+    connected = False
+    if scraper_url:
+        try:
+            token = raw.get("scraper_service_token", "")
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.get(f"{scraper_url}/health", headers=headers)
+            connected = r.status_code == 200
+        except Exception:
+            connected = False
+
+    return {
+        "connected": connected,
+        "scraper_url": scraper_url or None,
+        "sources": ["zonaprop", "argenprop", "mercadolibre"],
+    }
 
 
 # --- Legacy Zonaprop parser (kept for scraper microservice — not used by main app) ---

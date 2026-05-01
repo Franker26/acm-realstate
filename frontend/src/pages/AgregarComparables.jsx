@@ -93,7 +93,7 @@ export default function AgregarComparables() {
     return err
   }
 
-  const SUPPORTED_SOURCES = ['zonaprop.com.ar', 'mercadolibre.com.ar']
+  const SUPPORTED_SOURCES = ['zonaprop.com.ar', 'argenprop.com', 'mercadolibre.com.ar']
   const isSupportedUrl = SUPPORTED_SOURCES.some((s) => form.url?.includes(s))
 
   async function handleExtract() {
@@ -269,7 +269,7 @@ export default function AgregarComparables() {
                 <div className="inline-control-row">
                   <input type="url" name="url" value={form.url} tabIndex={1}
                     onChange={(e) => { handleChange('url', e.target.value); setExtractError(null) }}
-                    placeholder="https://www.zonaprop.com.ar/ o mercadolibre.com.ar/..." />
+                    placeholder="https://www.zonaprop.com.ar/, argenprop.com o mercadolibre.com.ar/..." />
                   {isSupportedUrl && (
                     <button
                       type="button"
