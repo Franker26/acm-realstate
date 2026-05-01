@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, updateACM } from '../api.js'
 import { useAuth, useWizard } from '../App.jsx'
 import { MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
+import { getSavedAppName, getSavedLogo } from '../theme.js'
 
 const COLUMNS = [
   { key: 'nuevo', title: 'Nuevo', description: 'Tasaciones recién creadas o pendientes de completar.', tone: 'blue' },
@@ -36,6 +37,7 @@ function statusMeta(acm) {
       label,
       tone: 'danger',
       hint: 'Requiere cambios antes de poder aprobarse.',
+      dotLabel: 'Cambios solicitados',
     }
   }
 
@@ -44,6 +46,7 @@ function statusMeta(acm) {
       label,
       tone: 'success',
       hint: 'Tasacion aprobada y lista para continuar o exportar.',
+      dotLabel: 'Aprobada',
     }
   }
 
@@ -52,6 +55,7 @@ function statusMeta(acm) {
       label,
       tone: 'warning',
       hint: 'Pendiente de revision y aprobacion.',
+      dotLabel: 'Pendiente',
     }
   }
 
@@ -59,6 +63,7 @@ function statusMeta(acm) {
     label,
     tone: 'neutral',
     hint: 'Esta tasacion no requiere aprobacion.',
+    dotLabel: 'Sin aprobacion',
   }
 }
 
@@ -96,6 +101,8 @@ export default function Home() {
   const [quickDraft, setQuickDraft] = useState({ nombre: '', direccion: '' })
   const [quickErrors, setQuickErrors] = useState({})
   const [routeTransition, setRouteTransition] = useState(null)
+  const [logo, setLogo] = useState(() => getSavedLogo())
+  const [appName, setAppName] = useState(() => getSavedAppName())
   const { dispatch } = useWizard()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -113,6 +120,24 @@ export default function Home() {
     }
     window.addEventListener('click', handleWindowClick)
     return () => window.removeEventListener('click', handleWindowClick)
+  }, [])
+
+  useEffect(() => {
+    function onStorage(e) {
+      if (e.key === 'acm_theme_logo') setLogo(e.newValue)
+      if (e.key === 'acm_theme_name') setAppName(e.newValue || 'ACM Real Estate')
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  useEffect(() => {
+    function onThemeChange() {
+      setLogo(getSavedLogo())
+      setAppName(getSavedAppName())
+    }
+    window.addEventListener('acm_theme_changed', onThemeChange)
+    return () => window.removeEventListener('acm_theme_changed', onThemeChange)
   }, [])
 
   const grouped = useMemo(() => {
@@ -167,6 +192,35 @@ export default function Home() {
       { label: 'Comparables cargados', value: mobileOverview.comparables, tone: 'violet', note: 'Base de mercado acumulada' },
     ]
   }, [mobileOverview])
+
+  const desktopNavItems = useMemo(() => {
+    return [
+      {
+        key: 'dashboard',
+        label: 'Dashboard',
+        description: 'Tablero operativo de tasaciones',
+        note: `${mobileOverview.inFlight} activas`,
+        onClick: () => navigate('/'),
+        active: true,
+      },
+      user?.is_approver && {
+        key: 'approvals',
+        label: 'Aprobaciones',
+        description: 'Cola de revisión del equipo',
+        note: `${mobileOverview.pendingApprovals} pendientes`,
+        onClick: () => navigate('/approvals'),
+        active: false,
+      },
+      {
+        key: 'settings',
+        label: 'Configuración',
+        description: 'Marca, usuarios y preferencias',
+        note: 'Workspace',
+        onClick: () => navigate('/settings'),
+        active: false,
+      },
+    ].filter(Boolean)
+  }, [mobileOverview.inFlight, mobileOverview.pendingApprovals, navigate, user?.is_approver])
 
   function handleNew() {
     dispatch({ type: 'RESET' })
@@ -309,33 +363,6 @@ export default function Home() {
 
   return (
     <div>
-      <div className="home-kanban-hero">
-        <div className="home-kanban-hero__copy">
-          <span className="page-eyebrow">Workspace operativo</span>
-          <div className="home-mobile-greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</div>
-          <h1>Tablero de tasaciones</h1>
-          <p>
-            {user?.is_admin
-              ? 'Vista general del flujo de trabajo con todas las tasaciones del equipo, aprobación incluida.'
-              : 'Seguí tus tasaciones, retomá el paso correcto y mové cada caso entre etapas con menos fricción.'}
-          </p>
-          <div className="home-kanban-hero__signals">
-            <div className="home-kanban-signal">
-              <span className="home-kanban-signal__label">Vista</span>
-              <strong>{user?.is_admin ? 'Equipo completo' : 'Seguimiento personal'}</strong>
-            </div>
-            <div className="home-kanban-signal">
-              <span className="home-kanban-signal__label">Estado del panel</span>
-              <strong>{acms.length} tasaciones en workspace</strong>
-            </div>
-          </div>
-        </div>
-        <div className="home-kanban-hero__actions">
-          <div className="home-kanban-hero__hint">Arrastrá cards entre columnas o abrí cada caso para retomarlo desde el paso correcto.</div>
-          <button className="btn btn-primary" onClick={handleNew}>+ Nueva tasación</button>
-        </div>
-      </div>
-
       {loading && (
         <MobileWorkspaceLoading
           eyebrow="Carga de panel"
@@ -606,137 +633,308 @@ export default function Home() {
             </nav>
           </section>
 
-          <section className="dashboard-metrics">
-            {summary.map((item) => (
-              <article key={item.label} className={`dashboard-metric dashboard-metric--${item.tone}`}>
-                <span className="dashboard-metric__label">{item.label}</span>
-                <strong className="dashboard-metric__value">{item.value}</strong>
-                <span className="dashboard-metric__note">{item.note}</span>
-              </article>
-            ))}
-          </section>
-
-          <div className="kanban-board home-desktop-board">
-            {COLUMNS.map((column) => {
-              const isDragTarget = dragOverCol === column.key
-              const isCancelled = column.key === 'cancelado'
-              return (
-                <section
-                  key={column.key}
-                  className={`kanban-column kanban-column--${column.tone}${isDragTarget ? ' kanban-column--drop-target' : ''}${isCancelled ? ' kanban-column--cancelled' : ''}`}
-                  onDragOver={(e) => handleDragOver(e, column.key)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, column.key)}
-                >
-                  <div className="kanban-column__header">
-                    <div>
-                      <span className="kanban-column__eyebrow">Etapa</span>
-                      <h2>{column.title}</h2>
-                      <p>{column.description}</p>
-                    </div>
-                    <span>{grouped[column.key]?.length || 0}</span>
+          <section className="home-desktop-shell" aria-label="Workspace desktop">
+            <div className="home-desktop-layout">
+              <div className="home-desktop-main">
+                <section className="home-desktop-hero">
+                  <div className="home-desktop-hero__copy">
+                    <span className="page-eyebrow">Workspace operativo</span>
+                    <div className="home-desktop-hero__greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</div>
+                    <h1>Tablero de tasaciones</h1>
+                    <p>
+                      {user?.is_admin
+                        ? 'Controlá el ritmo del equipo, revisá cuellos de botella y mantené cada ACM avanzando desde una sola vista.'
+                        : 'Retomá casos activos, detectá prioridades y mové tasaciones entre etapas con una experiencia más clara y moderna.'}
+                    </p>
                   </div>
 
-                  <div className="kanban-column__body">
-                    {(grouped[column.key] || []).map((acm) => {
-                      const isBeingDragged = draggedId === acm.id
-                      const status = statusMeta(acm)
-                      return (
-                        <article
-                          key={acm.id}
-                          className={`kanban-card${isCancelled ? ' kanban-card--cancelled' : ''}`}
-                          draggable={!updatingId}
-                          onDragStart={(e) => handleDragStart(e, acm)}
-                          onDragEnd={handleDragEnd}
-                          onClick={() => handleOpen(acm)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              handleOpen(acm)
-                            }
-                          }}
-                          tabIndex={0}
-                          role="button"
-                          style={{ opacity: isBeingDragged ? 0.4 : 1, cursor: 'grab' }}
-                        >
-                          <div className="kanban-card__top">
-                            <div>
-                              <div className="kanban-card__title">{acm.nombre}</div>
-                              <div className="kanban-card__address">{acm.direccion}</div>
-                            </div>
-                            <div className="kanban-card__top-actions">
-                              <span
-                                className={`kanban-card__status kanban-card__status--${status.tone}`}
-                                title={status.hint}
-                              >
-                                {status.label}
-                              </span>
-                              <div className="kanban-card__menu-wrap">
-                                <button
-                                  type="button"
-                                  className="kanban-card__menu-trigger"
-                                  aria-label="Más acciones"
-                                  aria-expanded={openMenuId === acm.id}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setOpenMenuId((current) => current === acm.id ? null : acm.id)
-                                  }}
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                >
-                                  ⋯
-                                </button>
-                                {openMenuId === acm.id && (
-                                  <div className="kanban-card__menu" onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                      type="button"
-                                      className="kanban-card__menu-item kanban-card__menu-item--danger"
-                                      onClick={() => handleDelete(acm.id, acm.nombre)}
-                                    >
-                                      Eliminar tasación
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                  <div className="home-desktop-hero__cards">
+                    <article className="home-desktop-highlight">
+                      <span className="home-desktop-highlight__label">Vista activa</span>
+                      <strong>{user?.is_admin ? 'Equipo completo' : 'Seguimiento personal'}</strong>
+                      <p>{acms.length} tasaciones sincronizadas en el workspace.</p>
+                    </article>
+                    <article className="home-desktop-highlight home-desktop-highlight--accent">
+                      <span className="home-desktop-highlight__label">Próximo foco</span>
+                      <strong>{mobileOverview.pendingApprovals > 0 ? 'Aprobaciones pendientes' : 'Flujo estable'}</strong>
+                      <p>
+                        {mobileOverview.pendingApprovals > 0
+                          ? `${mobileOverview.pendingApprovals} caso${mobileOverview.pendingApprovals === 1 ? '' : 's'} espera${mobileOverview.pendingApprovals === 1 ? '' : 'n'} revisión.`
+                          : 'No hay bloqueos de aprobación en este momento.'}
+                      </p>
+                    </article>
+                  </div>
+                </section>
 
-                          <div className="kanban-card__meta">
-                            <div className="kanban-card__owner">
-                              <div
-                                className="kanban-card__avatar"
-                                style={{ background: avatarColor(acm.owner_username || acm.nombre) }}
-                              >
-                                {initials(acm.owner_username || acm.nombre)}
-                              </div>
-                              <span>{acm.owner_username || 'Sin asignar'}</span>
-                            </div>
-                            <span>Act. {new Date(acm.updated_at || acm.fecha_creacion).toLocaleDateString('es-AR')}</span>
-                          </div>
+                <section className="dashboard-metrics home-desktop-metrics">
+                  {summary.map((item) => (
+                    <article key={item.label} className={`dashboard-metric dashboard-metric--${item.tone}`}>
+                      <span className="dashboard-metric__label">{item.label}</span>
+                      <strong className="dashboard-metric__value">{item.value}</strong>
+                      <span className="dashboard-metric__note">{item.note}</span>
+                    </article>
+                  ))}
+                </section>
 
-                          <div className="kanban-card__insights">
-                            <span className="kanban-card__chip">{comparablesLabel(acm)}</span>
-                            <span className="kanban-card__chip">{stageProgress(acm)}</span>
-                          </div>
-
-                          <div className="kanban-card__footer">
-                            <div className="kanban-card__footer-note">
-                              Abrí la ficha o arrastrá para mover de etapa.
-                            </div>
-                          </div>
-                        </article>
-                      )
-                    })}
-
-                    {(!grouped[column.key] || grouped[column.key].length === 0) && (
-                      <div className={`kanban-empty${isDragTarget ? ' kanban-empty--highlight' : ''}`}>
-                        {isDragTarget ? 'Soltá aquí para mover la tasación.' : 'Todavía no hay tasaciones en esta etapa.'}
+                <section className="home-desktop-focusbar">
+                  <div>
+                    <span className="home-desktop-section-label">En foco</span>
+                    <strong>Casos recientes para retomar rápido</strong>
+                  </div>
+                  <div className="home-desktop-focusbar__list">
+                    {spotlightAcms.slice(0, 3).map((acm) => (
+                      <button
+                        key={acm.id}
+                        type="button"
+                        className="home-desktop-mini-card"
+                        onClick={() => handleOpen(acm)}
+                      >
+                        <span>{(acm.stage || 'nuevo').replace('_', ' ')}</span>
+                        <strong>{acm.nombre}</strong>
+                        <small>{comparablesLabel(acm)}</small>
+                      </button>
+                    ))}
+                    {spotlightAcms.length === 0 && (
+                      <div className="home-desktop-mini-card home-desktop-mini-card--empty">
+                        No hay ACMs recientes para mostrar.
                       </div>
                     )}
                   </div>
                 </section>
-              )
-            })}
-          </div>
+
+                <div className="kanban-board home-desktop-board">
+                  {COLUMNS.map((column) => {
+                    const isDragTarget = dragOverCol === column.key
+                    const isCancelled = column.key === 'cancelado'
+                    return (
+                      <section
+                        key={column.key}
+                        className={`kanban-column kanban-column--${column.tone}${isDragTarget ? ' kanban-column--drop-target' : ''}${isCancelled ? ' kanban-column--cancelled' : ''}`}
+                        onDragOver={(e) => handleDragOver(e, column.key)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, column.key)}
+                      >
+                        <div className="kanban-column__header">
+                          <div>
+                            <span className="kanban-column__eyebrow">Etapa</span>
+                            <h2>{column.title}</h2>
+                            <p>{column.description}</p>
+                          </div>
+                          <span>{grouped[column.key]?.length || 0}</span>
+                        </div>
+
+                        <div className="kanban-column__body">
+                          {(grouped[column.key] || []).map((acm) => {
+                            const isBeingDragged = draggedId === acm.id
+                            const status = statusMeta(acm)
+                            return (
+                              <article
+                                key={acm.id}
+                                className={`kanban-card${isCancelled ? ' kanban-card--cancelled' : ''}`}
+                                draggable={!updatingId}
+                                onDragStart={(e) => handleDragStart(e, acm)}
+                                onDragEnd={handleDragEnd}
+                                onClick={() => handleOpen(acm)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault()
+                                    handleOpen(acm)
+                                  }
+                                }}
+                                tabIndex={0}
+                                role="button"
+                                style={{ opacity: isBeingDragged ? 0.4 : 1, cursor: 'grab' }}
+                              >
+                                <div className="kanban-card__top">
+                                  <div>
+                                    <div className="kanban-card__title">{acm.nombre}</div>
+                                    <div className="kanban-card__address">{acm.direccion}</div>
+                                  </div>
+                                  <div className="kanban-card__top-actions">
+                                    <span
+                                      className={`kanban-card__signal kanban-card__signal--${status.tone}`}
+                                      title={status.hint}
+                                      aria-label={status.dotLabel}
+                                    >
+                                      <span className="kanban-card__signal-dot" aria-hidden="true" />
+                                      <span className="sr-only">{status.dotLabel}</span>
+                                    </span>
+                                    <div className="kanban-card__menu-wrap">
+                                      <button
+                                        type="button"
+                                        className="kanban-card__menu-trigger"
+                                        aria-label="Más acciones"
+                                        aria-expanded={openMenuId === acm.id}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setOpenMenuId((current) => current === acm.id ? null : acm.id)
+                                        }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                      >
+                                        ⋯
+                                      </button>
+                                      {openMenuId === acm.id && (
+                                        <div className="kanban-card__menu" onClick={(e) => e.stopPropagation()}>
+                                          <button
+                                            type="button"
+                                            className="kanban-card__menu-item kanban-card__menu-item--danger"
+                                            onClick={() => handleDelete(acm.id, acm.nombre)}
+                                          >
+                                            Eliminar tasación
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="kanban-card__meta">
+                                  <div className="kanban-card__owner">
+                                    <div
+                                      className="kanban-card__avatar"
+                                      style={{ background: avatarColor(acm.owner_username || acm.nombre) }}
+                                    >
+                                      {initials(acm.owner_username || acm.nombre)}
+                                    </div>
+                                    <span>{acm.owner_username || 'Sin asignar'}</span>
+                                  </div>
+                                  <span>Act. {new Date(acm.updated_at || acm.fecha_creacion).toLocaleDateString('es-AR')}</span>
+                                </div>
+
+                                <div className="kanban-card__insights">
+                                  <span className="kanban-card__chip">{comparablesLabel(acm)}</span>
+                                  <span className="kanban-card__chip">{stageProgress(acm)}</span>
+                                </div>
+
+                                <div className="kanban-card__footer">
+                                  <div className="kanban-card__footer-note">
+                                    Abrí la ficha o arrastrá para mover de etapa.
+                                  </div>
+                                </div>
+                              </article>
+                            )
+                          })}
+
+                          {(!grouped[column.key] || grouped[column.key].length === 0) && (
+                            <div className={`kanban-empty${isDragTarget ? ' kanban-empty--highlight' : ''}`}>
+                              {isDragTarget ? 'Soltá aquí para mover la tasación.' : 'Todavía no hay tasaciones en esta etapa.'}
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <aside className="home-desktop-sidebar" aria-label="Navegación del workspace">
+                <section className="home-desktop-sidebar-card home-desktop-sidebar-card--brand">
+                  <div className="home-desktop-brand">
+                    <span className="home-desktop-brand__mark">
+                      {logo ? (
+                        <img src={logo} alt={`${appName} logo`} className="home-desktop-brand__logo" />
+                      ) : (
+                        <span>{appName.slice(0, 1).toUpperCase()}</span>
+                      )}
+                    </span>
+                    <div>
+                      <span className="home-desktop-section-label">Workspace</span>
+                      <strong>{appName}</strong>
+                      <p>{user?.is_admin ? 'Vista de coordinación del equipo' : 'Centro operativo personal'}</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="home-desktop-sidebar-card">
+                  <div className="home-desktop-sidebar-card__header">
+                    <div>
+                      <span className="home-desktop-section-label">Navegación</span>
+                      <strong>Accesos del workspace</strong>
+                    </div>
+                  </div>
+                  <div className="home-desktop-nav">
+                    {desktopNavItems.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={`home-desktop-nav__item${item.active ? ' is-active' : ''}`}
+                        onClick={item.onClick}
+                      >
+                        <span>{item.label}</span>
+                        <strong>{item.description}</strong>
+                        <small>{item.note}</small>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="home-desktop-sidebar-card">
+                  <div className="home-desktop-sidebar-card__header">
+                    <div>
+                      <span className="home-desktop-section-label">Acciones</span>
+                      <strong>Movimiento rápido</strong>
+                    </div>
+                  </div>
+                  <div className="home-desktop-action-stack">
+                    <button type="button" className="btn btn-primary home-desktop-action-stack__primary" onClick={handleNew}>
+                      + Nueva tasación
+                    </button>
+                    <button type="button" className="home-desktop-ghost-action" onClick={() => navigate('/settings')}>
+                      Abrir configuración del workspace
+                    </button>
+                    {user?.is_approver && (
+                      <button type="button" className="home-desktop-ghost-action" onClick={() => navigate('/approvals')}>
+                        Ir a aprobaciones pendientes
+                      </button>
+                    )}
+                  </div>
+                </section>
+
+                <section className="home-desktop-sidebar-card">
+                  <div className="home-desktop-sidebar-card__header">
+                    <div>
+                      <span className="home-desktop-section-label">Actividad</span>
+                      <strong>Últimos movimientos</strong>
+                    </div>
+                  </div>
+                  <div className="home-desktop-activity">
+                    {recentAcms.slice(0, 4).map((acm) => (
+                      <button
+                        key={acm.id}
+                        type="button"
+                        className="home-desktop-activity__item"
+                        onClick={() => handleOpen(acm)}
+                      >
+                        <span className="home-desktop-activity__date">
+                          {new Date(acm.updated_at || acm.fecha_creacion).toLocaleDateString('es-AR')}
+                        </span>
+                        <strong>{acm.nombre}</strong>
+                        <small>{stageProgress(acm)}</small>
+                      </button>
+                    ))}
+                    {recentAcms.length === 0 && (
+                      <div className="home-desktop-activity__empty">Todavía no hay actividad reciente.</div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="home-desktop-sidebar-card home-desktop-sidebar-card--user">
+                  <div className="home-desktop-user">
+                    <div className="home-desktop-user__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
+                      {initials(user?.username || 'Usuario')}
+                    </div>
+                    <div>
+                      <strong>{user?.username || 'Usuario'}</strong>
+                      <p>{user?.is_approver ? 'Admin approver' : user?.is_admin ? 'Administrador' : 'Workspace operativo'}</p>
+                    </div>
+                  </div>
+                  <button type="button" className="home-desktop-logout" onClick={handleMobileLogout}>
+                    Cerrar sesión
+                  </button>
+                </section>
+              </aside>
+            </div>
+          </section>
         </>
       )}
     </div>
