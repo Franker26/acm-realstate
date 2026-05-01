@@ -235,6 +235,17 @@ export default function AgregarComparables() {
                       <td>{i + 1}</td>
                       <td className="workspace-table__cell-ellipsis">
                         {c.direccion || c.url || '—'}
+                        {c.url && (
+                          <a
+                            href={c.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="table-url-link"
+                            title="Abrir publicación"
+                          >
+                            ↗
+                          </a>
+                        )}
                       </td>
                       <td>USD {c.precio.toLocaleString('es-AR')}</td>
                       <td>{h.toFixed(1)} m²</td>
@@ -270,6 +281,17 @@ export default function AgregarComparables() {
                   <input type="url" name="url" value={form.url} tabIndex={1}
                     onChange={(e) => { handleChange('url', e.target.value); setExtractError(null) }}
                     placeholder="https://www.zonaprop.com.ar/, argenprop.com o mercadolibre.com.ar/..." />
+                  {form.url && (
+                    <a
+                      href={form.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary btn-sm"
+                      tabIndex={-1}
+                    >
+                      Abrir
+                    </a>
+                  )}
                   {isSupportedUrl && (
                     <button
                       type="button"
