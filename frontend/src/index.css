@@ -5615,6 +5615,19 @@ body::before {
   white-space: nowrap;
 }
 
+.table-url-link {
+  margin-left: 6px;
+  color: var(--primary, #3f5bd8);
+  font-size: 12px;
+  text-decoration: none;
+  opacity: 0.7;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.table-url-link:hover {
+  opacity: 1;
+}
+
 .checkbox-row__label {
   white-space: nowrap;
 }
