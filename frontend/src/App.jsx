@@ -22,6 +22,7 @@ import AdminDashboard from './pages/admin/AdminDashboard.jsx'
 import AdminCompanyDetail from './pages/admin/AdminCompanyDetail.jsx'
 import AdminSettings from './pages/admin/AdminSettings.jsx'
 import NotFound from './pages/NotFound.jsx'
+import FloatingCalculator from './components/FloatingCalculator.jsx'
 import { getBrandingSettings, getCurrentUser, loginUser } from './api.js'
 
 // --- Auth ---
@@ -376,6 +377,7 @@ export default function App() {
           <main className="app-main">
             <AppRoutes />
           </main>
+          <FloatingCalculator />
         </WizardProvider>
       </AuthProvider>
     </BrowserRouter>
