@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { createACM, getACM, updateACM } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx'
+import MapModal from '../components/MapModal.jsx'
 import PropertyForm from '../components/PropertyForm.jsx'
 import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
@@ -89,6 +90,7 @@ export default function NuevaTasacion() {
   const [submitting, setSubmitting] = useState(false)
   const [apiError, setApiError] = useState(null)
   const [loading, setLoading] = useState(!!id)
+  const [mapOpen, setMapOpen] = useState(false)
   const { dispatch } = useWizard()
   const navigate = useNavigate()
 
@@ -187,13 +189,24 @@ export default function NuevaTasacion() {
                 </div>
                 <div className="form-group full">
                   <label>Dirección / Zona *</label>
-                  <AddressAutocomplete
-                    name="direccion"
-                    value={values.direccion}
-                    tabIndex={0}
-                    placeholder="Ej: Av. Corrientes 1234, CABA"
-                    onChange={(v) => handleChange('direccion', v)}
-                  />
+                  <div className="inline-control-row">
+                    <AddressAutocomplete
+                      name="direccion"
+                      value={values.direccion}
+                      tabIndex={0}
+                      placeholder="Ej: Av. Corrientes 1234, CABA"
+                      onChange={(v) => handleChange('direccion', v)}
+                    />
+                    {values.direccion && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setMapOpen(true)}
+                      >
+                        Ver en mapa
+                      </button>
+                    )}
+                  </div>
                   {errors.direccion && <span className="error-msg">{errors.direccion}</span>}
                 </div>
               </div>
@@ -252,6 +265,9 @@ export default function NuevaTasacion() {
           </button>
         </div>
       </form>
+      {mapOpen && (
+        <MapModal address={values.direccion} onClose={() => setMapOpen(false)} />
+      )}
     </div>
   )
 }
