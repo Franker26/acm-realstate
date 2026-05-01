@@ -91,8 +91,10 @@ export default function Home() {
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverCol, setDragOverCol] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
+  const [activeMobileStage, setActiveMobileStage] = useState('all')
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
   const { dispatch } = useWizard()
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -123,6 +125,12 @@ export default function Home() {
     return base
   }, [acms])
 
+  const mobileFeed = useMemo(() => {
+    const items = [...acms].sort((a, b) => new Date(b.updated_at || b.fecha_creacion) - new Date(a.updated_at || a.fecha_creacion))
+    if (activeMobileStage === 'all') return items
+    return items.filter((item) => (item.stage || 'nuevo') === activeMobileStage)
+  }, [acms, activeMobileStage])
+
   const summary = useMemo(() => {
     const pendingApprovals = acms.filter((acm) => String(acm.approval_status || '').toLowerCase() === 'pendiente').length
     const completed = grouped.finalizado?.length || 0
@@ -139,6 +147,17 @@ export default function Home() {
   function handleNew() {
     dispatch({ type: 'RESET' })
     navigate('/acm/tipo')
+  }
+
+  function handleMobileNavigate(path) {
+    setMobilePanelOpen(false)
+    navigate(path)
+  }
+
+  function handleMobileLogout() {
+    setMobilePanelOpen(false)
+    logout()
+    navigate('/login')
   }
 
   async function handleDelete(id, nombre) {
@@ -257,6 +276,147 @@ export default function Home() {
 
       {!loading && !error && (
         <>
+          <section className="home-mobile-shell">
+            <div className="home-mobile-topbar">
+              <div>
+                <span className="page-eyebrow">Workspace operativo</span>
+                <div className="home-mobile-greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</div>
+                <p className="home-mobile-copy">
+                  {user?.is_admin
+                    ? 'Priorizá, retomá y desbloqueá tasaciones del equipo desde un feed continuo.'
+                    : 'Retomá rápido tus tasaciones y entrá directo a la etapa que importa.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="home-mobile-panel-toggle"
+                onClick={() => setMobilePanelOpen((value) => !value)}
+                aria-expanded={mobilePanelOpen}
+                aria-label="Abrir panel de utilidades"
+              >
+                <span />
+                <span />
+                <span />
+              </button>
+            </div>
+
+            <div className="home-mobile-composer">
+              <button className="btn btn-primary home-mobile-create" onClick={handleNew}>
+                + Nueva tasación
+              </button>
+              <div className="home-mobile-stats">
+                {summary.slice(0, 3).map((item) => (
+                  <article key={item.label} className={`dashboard-metric dashboard-metric--${item.tone}`}>
+                    <span className="dashboard-metric__label">{item.label}</span>
+                    <strong className="dashboard-metric__value">{item.value}</strong>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className="home-mobile-stage-rail">
+              <button
+                type="button"
+                className={`home-mobile-stage-pill${activeMobileStage === 'all' ? ' is-active' : ''}`}
+                onClick={() => setActiveMobileStage('all')}
+              >
+                <span>Todo</span>
+                <strong>{acms.length}</strong>
+              </button>
+              {COLUMNS.map((column) => (
+                <button
+                  key={column.key}
+                  type="button"
+                  className={`home-mobile-stage-pill home-mobile-stage-pill--${column.tone}${activeMobileStage === column.key ? ' is-active' : ''}`}
+                  onClick={() => setActiveMobileStage(column.key)}
+                >
+                  <span>{column.title}</span>
+                  <strong>{grouped[column.key]?.length || 0}</strong>
+                </button>
+              ))}
+            </div>
+
+            <div className={`home-mobile-utility-panel${mobilePanelOpen ? ' is-open' : ''}`}>
+              <div className="home-mobile-utility-panel__header">
+                <div>
+                  <span className="home-mobile-utility-panel__eyebrow">Accesos</span>
+                  <strong>Panel operativo</strong>
+                </div>
+                <button type="button" className="home-mobile-utility-close" onClick={() => setMobilePanelOpen(false)}>×</button>
+              </div>
+              <div className="home-mobile-utility-list">
+                {user?.is_approver && (
+                  <button type="button" className="settings-sidebar-item settings-sidebar-item--active" onClick={() => handleMobileNavigate('/approvals')}>
+                    Aprobaciones
+                  </button>
+                )}
+                <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/settings')}>
+                  Configuración
+                </button>
+                <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/')}>
+                  Refrescar tablero
+                </button>
+                <button type="button" className="settings-sidebar-item" onClick={handleMobileLogout}>
+                  Cerrar sesión
+                </button>
+              </div>
+            </div>
+
+            <div className="home-mobile-feed">
+              <div className="home-mobile-feed__header">
+                <span className="home-mobile-section-label">Feed activo</span>
+                <span className="home-mobile-feed__count">{mobileFeed.length} casos</span>
+              </div>
+              {mobileFeed.map((acm) => {
+                const status = statusMeta(acm)
+                return (
+                  <article
+                    key={acm.id}
+                    className="kanban-card home-mobile-card"
+                    onClick={() => handleOpen(acm)}
+                    tabIndex={0}
+                    role="button"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleOpen(acm)
+                      }
+                    }}
+                  >
+                    <div className="kanban-card__top">
+                      <div>
+                        <div className="kanban-card__title">{acm.nombre}</div>
+                        <div className="kanban-card__address">{acm.direccion}</div>
+                      </div>
+                      <span className={`kanban-card__status kanban-card__status--${status.tone}`}>{status.label}</span>
+                    </div>
+                    <div className="home-mobile-card__meta">
+                      <div className="kanban-card__owner">
+                        <div
+                          className="kanban-card__avatar"
+                          style={{ background: avatarColor(acm.owner_username || acm.nombre) }}
+                        >
+                          {initials(acm.owner_username || acm.nombre)}
+                        </div>
+                        <span>{acm.owner_username || 'Sin asignar'}</span>
+                      </div>
+                      <span>{new Date(acm.updated_at || acm.fecha_creacion).toLocaleDateString('es-AR')}</span>
+                    </div>
+                    <div className="kanban-card__insights">
+                      <span className="kanban-card__chip">{comparablesLabel(acm)}</span>
+                      <span className="kanban-card__chip">{stageProgress(acm)}</span>
+                    </div>
+                  </article>
+                )
+              })}
+              {mobileFeed.length === 0 && (
+                <div className="kanban-empty">
+                  No hay tasaciones en esta vista por ahora.
+                </div>
+              )}
+            </div>
+          </section>
+
           <section className="dashboard-metrics">
             {summary.map((item) => (
               <article key={item.label} className={`dashboard-metric dashboard-metric--${item.tone}`}>
@@ -269,7 +429,7 @@ export default function Home() {
 
           <div className="home-mobile-section-label">Recientes</div>
 
-          <div className="kanban-board">
+          <div className="kanban-board home-desktop-board">
             {COLUMNS.map((column) => {
               const isDragTarget = dragOverCol === column.key
               const isCancelled = column.key === 'cancelado'
