@@ -140,6 +140,19 @@ def _parse_rendered(html: str) -> dict:
                     result["direccion"] = t
                     break
 
+    # Clean ML address noise appended by the SPA
+    if "direccion" in result:
+        addr = result["direccion"]
+        addr = re.sub(r"^Ubicaci[oó]n\s+", "", addr, flags=re.I)
+        addr = re.sub(r"\s*Ver informaci[oó]n.*$", "", addr, flags=re.I)
+        # Remove duplicate trailing segments (e.g. "Belgrano, Capital Federal, Capital Federal")
+        parts = [p.strip() for p in addr.split(",")]
+        seen: list[str] = []
+        for p in parts:
+            if p and p not in seen:
+                seen.append(p)
+        result["direccion"] = ", ".join(seen).strip()
+
     return result
 
 
