@@ -63,9 +63,11 @@ export default function AgregarComparables() {
   const [submitting, setSubmitting] = useState(false)
   const [apiError, setApiError] = useState(null)
   const [extracting, setExtracting] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [extractError, setExtractError] = useState(null)
   const [extractPreview, setExtractPreview] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const retryTimerRef = React.useRef(null)
   const [pageReady, setPageReady] = useState(false)
   const { dispatch } = useWizard()
   const navigate = useNavigate()
@@ -99,14 +101,19 @@ export default function AgregarComparables() {
   async function handleExtract() {
     if (!form.url || !isSupportedUrl) return
     setExtracting(true)
+    setRetrying(false)
     setExtractError(null)
+    // Show "Reintentando..." if primary takes too long (likely failing over to backup)
+    retryTimerRef.current = setTimeout(() => setRetrying(true), 10_000)
     try {
       const data = await extractProperty(form.url)
       setExtractPreview(data)
     } catch (e) {
       setExtractError(e.message)
     } finally {
+      clearTimeout(retryTimerRef.current)
       setExtracting(false)
+      setRetrying(false)
     }
   }
 
@@ -196,7 +203,7 @@ export default function AgregarComparables() {
 
   return (
     <div>
-      <SmartLoader loading={extracting} logoSrc={logoSrc} />
+      <SmartLoader loading={extracting} logoSrc={logoSrc} message={retrying ? 'Reintentando extracción...' : undefined} />
       <WizardNav currentStep={2} />
       <div className="step-header">
         <span className="page-eyebrow">Paso 2</span>
@@ -277,7 +284,7 @@ export default function AgregarComparables() {
                       onClick={handleExtract}
                       disabled={extracting}
                     >
-                      {extracting ? 'Extrayendo...' : 'Extraer datos'}
+                      {retrying ? 'Reintentando extracción...' : extracting ? 'Extrayendo...' : 'Extraer datos'}
                     </button>
                   )}
                 </div>
