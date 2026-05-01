@@ -17,10 +17,10 @@ import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
 import Settings from './pages/Settings.jsx'
 import Approvals from './pages/Approvals.jsx'
-import MlCallback from './pages/MlCallback.jsx'
 import AdminLogin from './pages/admin/AdminLogin.jsx'
 import AdminDashboard from './pages/admin/AdminDashboard.jsx'
 import AdminCompanyDetail from './pages/admin/AdminCompanyDetail.jsx'
+import AdminSettings from './pages/admin/AdminSettings.jsx'
 import NotFound from './pages/NotFound.jsx'
 import { getBrandingSettings, getCurrentUser, loginUser } from './api.js'
 
@@ -211,6 +211,9 @@ function AppHeader() {
   }
 
   if (location.pathname === '/login' || location.pathname.startsWith('/admin')) return null
+  const isHomeRoute = location.pathname === '/'
+  const isApprovalsRoute = location.pathname === '/approvals'
+  const isSettingsRoute = location.pathname === '/settings'
 
   const navItems = [
     { to: '/', label: 'Tablero', visible: true },
@@ -219,7 +222,7 @@ function AppHeader() {
   ].filter((item) => item.visible)
 
   return (
-    <header className="app-header">
+    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute ? ' app-header--home-mobile-hidden' : ''}`}>
       <div className="app-header__shell">
         <div className="app-header__left">
           <Link to="/" className="app-title">
@@ -309,11 +312,11 @@ function AppRoutes() {
       <Route path="/acm/:id/step/5" element={<PrivateRoute><ExportarPDF /></PrivateRoute>} />
       <Route path="/approvals" element={<PrivateRoute><Approvals /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
-      <Route path="/ml-callback" element={<MlCallback />} />
       <Route path="/admin" element={<AdminLogin />} />
       <Route path="/admin/" element={<AdminLogin />} />
       <Route path="/admin/companies" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       <Route path="/admin/companies/:id" element={<AdminRoute><AdminCompanyDetail /></AdminRoute>} />
+      <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
       <Route path="/admin/*" element={<AdminLogin />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
@@ -331,9 +334,12 @@ function AdminLayout({ children }) {
     <div className="admin-shell">
       <header className="admin-header">
         <span className="admin-header__brand">ACM Admin</span>
-        <nav>
+        <nav style={{ display: 'flex', gap: '1.25rem' }}>
           <Link to="/admin/companies" className="admin-link" style={{ color: 'rgba(255,255,255,0.85)' }}>
             Empresas
+          </Link>
+          <Link to="/admin/settings" className="admin-link" style={{ color: 'rgba(255,255,255,0.85)' }}>
+            Configuración
           </Link>
         </nav>
         <button onClick={handleLogout} className="admin-btn admin-btn--sm" style={{ marginLeft: 'auto' }}>

@@ -82,9 +82,5 @@ export const reviewACM = (id, data) => request('PUT', `/api/acm/${id}/approval`,
 export const getBrandingSettings = () =>
   request('GET', '/api/settings/branding', undefined, { auth: false, redirectOn401: false })
 export const updateBrandingSettings = (data) => request('PUT', '/api/settings/branding', data)
-export const getIntegrationSettings = () => request('GET', '/api/settings/integrations')
-export const updateIntegrationSettings = (data) => request('PUT', '/api/settings/integrations', data)
-export const getMlAuthUrl = () => request('GET', '/api/settings/integrations/ml-auth-url')
-export const exchangeMlCode = (code) => request('POST', '/api/settings/integrations/ml-exchange', { code })
-export const disconnectMl = () => request('DELETE', '/api/settings/integrations/ml-disconnect')
+export const getIntegrationStatus = () => request('GET', '/api/settings/integrations/status')
 export const getSystemParams = () => request('GET', '/api/settings/params')

@@ -216,3 +216,11 @@ class AppSetting(Base):
 
     key = Column(String, primary_key=True)
     value = Column(String, nullable=True)
+
+
+class PlatformSetting(Base):
+    """Global platform-level key-value store, managed by superadmin."""
+    __tablename__ = "platform_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=True)

@@ -1,10 +1,12 @@
 from fastapi import HTTPException
 
+from .argenprop import ArgenpropAdapter
 from .mercadolibre import MercadoLibreAdapter
 from .zonaprop import ZonapropAdapter
 
 _ADAPTERS = [
     ZonapropAdapter(),
+    ArgenpropAdapter(),
     MercadoLibreAdapter(),
 ]
 
@@ -14,4 +16,4 @@ async def extract(url: str, settings: dict) -> dict:
     for adapter in _ADAPTERS:
         if adapter.can_handle(url):
             return await adapter.extract(url, settings)
-    raise HTTPException(400, f"No hay integración disponible para esta URL.")
+    raise HTTPException(400, "No hay integración disponible para esta URL.")

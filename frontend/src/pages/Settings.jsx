@@ -1,18 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../App.jsx'
 import {
   changePassword,
   createUser,
   deleteUser,
-  disconnectMl,
   getBrandingSettings,
-  getIntegrationSettings,
-  getMlAuthUrl,
+  getIntegrationStatus,
   getSystemParams,
   listUsers,
   updateBrandingSettings,
-  updateIntegrationSettings,
   updateUser,
 } from '../api.js'
 import { applyTheme, getCachedBrandingPayload, syncBranding } from '../theme.js'
@@ -34,9 +31,26 @@ function SectionTitle({ children }) {
   return <h2 className="settings-main-title">{children}</h2>
 }
 
+function primaryRoleLabel(user) {
+  if (user.is_approver) return 'Approver'
+  if (user.is_admin) return 'Admin'
+  return 'Usuario'
+}
+
+function initials(name = '') {
+  return name.slice(0, 2).toUpperCase() || 'AC'
+}
+
+function avatarColor(seed = '') {
+  let hash = 0
+  for (const char of seed) hash = char.charCodeAt(0) + ((hash << 5) - hash)
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 55%, 46%)`
+}
+
 // ── Panel: Equipo (users) ─────────────────────────────────────────────────────
 
-function UsersPanel({ currentUser, onCurrentUserUpdated }) {
+function UsersPanel({ currentUser, onCurrentUserUpdated, isMobile = false }) {
   const [users, setUsers] = useState([])
   const [error, setError] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -45,9 +59,15 @@ function UsersPanel({ currentUser, onCurrentUserUpdated }) {
   const [pwdEdit, setPwdEdit] = useState({})
   const [savingPwd, setSavingPwd] = useState({})
   const [savingRoleId, setSavingRoleId] = useState(null)
+  const [selectedUserId, setSelectedUserId] = useState(null)
 
   useEffect(() => {
-    listUsers().then(setUsers).catch((e) => setError(e.message))
+    listUsers()
+      .then((data) => {
+        setUsers(data)
+        setSelectedUserId((current) => current || data[0]?.id || null)
+      })
+      .catch((e) => setError(e.message))
   }, [])
 
   async function handleAdd(e) {
@@ -58,6 +78,7 @@ function UsersPanel({ currentUser, onCurrentUserUpdated }) {
     try {
       const created = await createUser(newUser)
       setUsers((prev) => [...prev, created])
+      setSelectedUserId(created.id)
       setNewUser({ username: '', password: '', is_admin: false, is_approver: false, needs_approval: false })
       setShowAdd(false)
     } catch (e) {
@@ -73,6 +94,11 @@ function UsersPanel({ currentUser, onCurrentUserUpdated }) {
     try {
       await deleteUser(id)
       setUsers((prev) => prev.filter((u) => u.id !== id))
+      setSelectedUserId((current) => {
+        if (current !== id) return current
+        const remaining = users.filter((u) => u.id !== id)
+        return remaining[0]?.id || null
+      })
     } catch (e) {
       setError(e.message)
     }
@@ -108,6 +134,148 @@ function UsersPanel({ currentUser, onCurrentUserUpdated }) {
     } finally {
       setSavingRoleId(null)
     }
+  }
+
+  const selectedUser = users.find((user) => user.id === selectedUserId) || null
+
+  if (isMobile) {
+    return (
+      <div>
+        <SectionTitle>Equipo</SectionTitle>
+        {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+
+        <div className="settings-group settings-group--mobile-users">
+          <div className="settings-group-header">
+            <span>Usuarios del workspace</span>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowAdd((value) => !value)}>
+              {showAdd ? 'Cerrar' : '+ Nuevo usuario'}
+            </button>
+          </div>
+
+          {showAdd && (
+            <form onSubmit={handleAdd} className="settings-inline-form settings-inline-form--mobile">
+              <div className="settings-inline-fields">
+                <input
+                  type="text"
+                  placeholder="Usuario"
+                  value={newUser.username}
+                  autoFocus
+                  onChange={(e) => setNewUser((p) => ({ ...p, username: e.target.value }))}
+                />
+                <input
+                  type="password"
+                  placeholder="Contraseña"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser((p) => ({ ...p, password: e.target.value }))}
+                />
+              </div>
+              <div className="settings-toggle-row">
+                <label className="settings-toggle">
+                  <input type="checkbox" checked={newUser.is_admin}
+                    onChange={(e) => setNewUser((p) => ({ ...p, is_admin: e.target.checked, is_approver: e.target.checked ? p.is_approver : false }))} />
+                  <span>Admin</span>
+                </label>
+                <label className="settings-toggle">
+                  <input type="checkbox" checked={newUser.is_approver}
+                    onChange={(e) => setNewUser((p) => ({ ...p, is_approver: e.target.checked, is_admin: e.target.checked ? true : p.is_admin }))} />
+                  <span>Approver</span>
+                </label>
+                <label className="settings-toggle">
+                  <input type="checkbox" checked={newUser.needs_approval}
+                    onChange={(e) => setNewUser((p) => ({ ...p, needs_approval: e.target.checked }))} />
+                  <span>Necesita aprobación</span>
+                </label>
+              </div>
+              <div className="settings-actions-row">
+                <button type="submit" className="btn btn-primary btn-sm" disabled={adding}>
+                  {adding ? <span className="spinner" /> : 'Crear'}
+                </button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowAdd(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="settings-mobile-users-list" role="list" aria-label="Usuarios del workspace">
+            {users.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                className={`settings-mobile-user-row${selectedUserId === user.id ? ' is-active' : ''}`}
+                onClick={() => setSelectedUserId(user.id)}
+                role="listitem"
+              >
+                <strong>
+                  {user.username}
+                  {user.username === currentUser.username ? <span className="settings-user-self">(vos)</span> : null}
+                </strong>
+                <span>{primaryRoleLabel(user)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {selectedUser && (
+          <div className="settings-group settings-group--mobile-users-detail">
+            <div className="settings-group-header">
+              <span>Detalle de usuario</span>
+            </div>
+            <div className="settings-mobile-user-detail">
+              <div className="settings-mobile-user-detail__head">
+                <div>
+                  <strong>{selectedUser.username}</strong>
+                  <div className="settings-mobile-user-detail__role">{primaryRoleLabel(selectedUser)}</div>
+                </div>
+                <RoleBadges user={selectedUser} />
+              </div>
+
+              <div className="settings-toggle-list">
+                <label className="settings-toggle">
+                  <input type="checkbox" checked={selectedUser.is_admin} disabled={savingRoleId === selectedUser.id}
+                    onChange={(e) => handleToggle(selectedUser, 'is_admin', e.target.checked)} />
+                  <span>Admin</span>
+                </label>
+                <label className="settings-toggle">
+                  <input type="checkbox" checked={selectedUser.is_approver} disabled={savingRoleId === selectedUser.id}
+                    onChange={(e) => handleToggle(selectedUser, 'is_approver', e.target.checked)} />
+                  <span>Approver</span>
+                </label>
+                <label className="settings-toggle">
+                  <input type="checkbox" checked={selectedUser.needs_approval} disabled={savingRoleId === selectedUser.id}
+                    onChange={(e) => handleToggle(selectedUser, 'needs_approval', e.target.checked)} />
+                  <span>Necesita aprobación</span>
+                </label>
+              </div>
+
+              <div className="settings-password-row settings-password-row--mobile">
+                <input
+                  type="password"
+                  placeholder="Nueva contraseña"
+                  value={pwdEdit[selectedUser.id] || ''}
+                  onChange={(e) => setPwdEdit((p) => ({ ...p, [selectedUser.id]: e.target.value }))}
+                />
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => handleChangePwd(selectedUser.id)}
+                  disabled={!pwdEdit[selectedUser.id] || pwdEdit[selectedUser.id].length < 4 || savingPwd[selectedUser.id]}
+                >
+                  {savingPwd[selectedUser.id] ? <span className="spinner" /> : 'Guardar contraseña'}
+                </button>
+              </div>
+
+              {selectedUser.username !== currentUser.username && (
+                <div className="settings-actions-row">
+                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(selectedUser.id)}>
+                    Eliminar usuario
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -400,151 +568,41 @@ function MapPanel() {
   )
 }
 
-// ── Panel: Estado de integraciones ────────────────────────────────────────────
+// ── Panel: Estado de integraciones (solo lectura) ─────────────────────────────
 
 function IntegrationStatusPanel() {
-  const [settings, setSettings] = useState(null)
-  const [zpStatus, setZpStatus] = useState('idle') // 'idle' | 'testing' | 'ok' | 'error'
-  const [connecting, setConnecting] = useState(false)
-  const [disconnecting, setDisconnecting] = useState(false)
+  const [data, setData] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    getIntegrationSettings().then(setSettings).catch((e) => setError(e.message))
+    getIntegrationStatus().then(setData).catch((e) => setError(e.message))
   }, [])
-
-  async function testZonaprop() {
-    const url = settings?.scraper_service_url?.trim()
-    if (!url) return
-    setZpStatus('testing')
-    try {
-      const res = await fetch(`${url}/health`)
-      setZpStatus(res.ok ? 'ok' : 'error')
-    } catch {
-      setZpStatus('error')
-    }
-  }
-
-  async function handleConnect() {
-    setConnecting(true)
-    setError(null)
-    try {
-      const { url } = await getMlAuthUrl()
-      window.location.href = url
-    } catch (e) {
-      setError(e.message)
-      setConnecting(false)
-    }
-  }
-
-  async function handleDisconnect() {
-    if (!window.confirm('¿Desconectar la cuenta de MercadoLibre?')) return
-    setDisconnecting(true)
-    setError(null)
-    try {
-      await disconnectMl()
-      setSettings((prev) => ({ ...prev, ml_connected: false, ml_user_nickname: null }))
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setDisconnecting(false)
-    }
-  }
-
-  const hasZpUrl = Boolean(settings?.scraper_service_url?.trim())
-  const mlConnected = Boolean(settings?.ml_connected)
-  const hasMlCreds = Boolean(settings?.ml_app_id?.trim())
-
-  function zpDotClass() {
-    if (!hasZpUrl) return 'unknown'
-    if (zpStatus === 'ok') return 'ok'
-    if (zpStatus === 'error') return 'error'
-    return 'unknown'
-  }
-
-  function zpStatusText() {
-    if (!hasZpUrl) return 'Sin configurar'
-    if (zpStatus === 'ok') return 'Microservicio respondiendo'
-    if (zpStatus === 'error') return 'Sin conexión'
-    if (zpStatus === 'testing') return 'Testeando...'
-    return 'Estado desconocido'
-  }
 
   return (
     <div>
       <SectionTitle>Estado de integraciones</SectionTitle>
+      <p style={{ margin: '0 0 20px', color: 'var(--text-muted)', fontSize: 13 }}>
+        La configuración de integraciones es administrada por el equipo de soporte.
+      </p>
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-      {!settings ? (
+      {!data ? (
         <span className="spinner" />
       ) : (
         <div className="integration-status-grid">
-
-          {/* Zonaprop */}
-          <div className="integration-card">
-            <div className="integration-card__header">
-              <span className={`integration-card__dot integration-card__dot--${zpDotClass()}`} />
-              <span className="integration-card__name">Zonaprop</span>
+          {data.sources.map((source) => (
+            <div key={source.key} className="integration-card">
+              <div className="integration-card__header">
+                <span className={`integration-card__dot integration-card__dot--${source.available ? 'ok' : 'error'}`} />
+                <span className="integration-card__name">{source.name}</span>
+              </div>
+              <div className="integration-card__detail">
+                <span className={`integration-card__status-label integration-card__status-label--${source.available ? 'ok' : 'error'}`}>
+                  {source.available ? 'Disponible' : 'No disponible'}
+                </span>
+              </div>
             </div>
-            <div className="integration-card__detail">
-              <span className={`integration-card__status-label integration-card__status-label--${zpDotClass()}`}>
-                {zpStatusText()}
-              </span>
-              {hasZpUrl && (
-                <span className="integration-card__meta">{settings.scraper_service_url}</span>
-              )}
-            </div>
-            {hasZpUrl && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={testZonaprop}
-                disabled={zpStatus === 'testing'}
-              >
-                {zpStatus === 'testing' ? <span className="spinner" /> : 'Testear conexión'}
-              </button>
-            )}
-            {!hasZpUrl && (
-              <span className="integration-card__hint">
-                Configurá la URL del microservicio en Técnico → Parámetros de integraciones.
-              </span>
-            )}
-          </div>
-
-          {/* MercadoLibre */}
-          <div className="integration-card">
-            <div className="integration-card__header">
-              <span className={`integration-card__dot integration-card__dot--${mlConnected ? 'ok' : 'error'}`} />
-              <span className="integration-card__name">MercadoLibre</span>
-            </div>
-            <div className="integration-card__detail">
-              <span className={`integration-card__status-label integration-card__status-label--${mlConnected ? 'ok' : 'error'}`}>
-                {mlConnected ? 'Conectado' : 'No conectado'}
-              </span>
-              {mlConnected && settings.ml_user_nickname && (
-                <span className="integration-card__meta">{settings.ml_user_nickname}</span>
-              )}
-            </div>
-            {mlConnected ? (
-              <button className="btn btn-danger btn-sm" onClick={handleDisconnect} disabled={disconnecting}>
-                {disconnecting ? <span className="spinner" /> : 'Desconectar'}
-              </button>
-            ) : (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleConnect}
-                disabled={connecting || !hasMlCreds}
-                title={!hasMlCreds ? 'Configurá App ID y Secret primero en Técnico → Parámetros de integraciones' : undefined}
-              >
-                {connecting ? <span className="spinner" /> : 'Conectar'}
-              </button>
-            )}
-            {!hasMlCreds && !mlConnected && (
-              <span className="integration-card__hint">
-                Configurá App ID y Secret en Técnico → Parámetros de integraciones.
-              </span>
-            )}
-          </div>
-
+          ))}
         </div>
       )}
     </div>
@@ -597,158 +655,28 @@ function SystemParamsPanel() {
   )
 }
 
-// ── Panel: Parámetros de integraciones (debug) ────────────────────────────────
-
-function IntegrationParamsPanel() {
-  const [settings, setSettings] = useState({
-    scraper_service_url: '', scraper_service_token: '',
-    ml_app_id: '', ml_app_secret: '',
-    ml_connected: false, ml_user_nickname: null,
-  })
-  const [saving, setSaving] = useState(null)
-  const [testing, setTesting] = useState(null)
-  const [msgs, setMsgs] = useState({})
-  const [errors, setErrors] = useState({})
-
-  useEffect(() => {
-    getIntegrationSettings()
-      .then((d) => setSettings({
-        scraper_service_url: d.scraper_service_url || '',
-        scraper_service_token: d.scraper_service_token === '***' ? '***' : (d.scraper_service_token || ''),
-        ml_app_id: d.ml_app_id || '',
-        ml_app_secret: d.ml_app_secret === '***' ? '***' : (d.ml_app_secret || ''),
-        ml_connected: d.ml_connected || false,
-        ml_user_nickname: d.ml_user_nickname || null,
-      }))
-      .catch(() => {})
-  }, [])
-
-  function set(key, val) { setSettings((p) => ({ ...p, [key]: val })) }
-  function msg(section, text) { setMsgs((p) => ({ ...p, [section]: text })) }
-  function err(section, text) { setErrors((p) => ({ ...p, [section]: text })) }
-
-  async function saveZonaprop() {
-    setSaving('zonaprop'); msg('zonaprop', null); err('zonaprop', null)
-    try {
-      await updateIntegrationSettings({
-        scraper_service_url: settings.scraper_service_url.trim() || null,
-        scraper_service_token: settings.scraper_service_token === '***' ? '***' : (settings.scraper_service_token.trim() || null),
-      })
-      msg('zonaprop', 'Guardado.')
-    } catch (e) { err('zonaprop', e.message) } finally { setSaving(null) }
-  }
-
-  async function testZonaprop() {
-    const url = settings.scraper_service_url.trim()
-    if (!url) return
-    setTesting('zonaprop'); msg('zonaprop', null); err('zonaprop', null)
-    try {
-      const res = await fetch(`${url}/health`)
-      if (res.ok) msg('zonaprop', '✓ Microservicio responde correctamente.')
-      else err('zonaprop', `Status ${res.status} — verificá que el túnel esté activo.`)
-    } catch { err('zonaprop', 'No se pudo conectar.') }
-    finally { setTesting(null) }
-  }
-
-  async function saveMl() {
-    setSaving('ml'); msg('ml', null); err('ml', null)
-    try {
-      await updateIntegrationSettings({
-        ml_app_id: settings.ml_app_id.trim() || null,
-        ml_app_secret: settings.ml_app_secret === '***' ? '***' : (settings.ml_app_secret.trim() || null),
-      })
-      msg('ml', 'Credenciales guardadas.')
-    } catch (e) { err('ml', e.message) } finally { setSaving(null) }
-  }
-
-  return (
-    <div>
-      <SectionTitle>Parámetros de integraciones</SectionTitle>
-
-      {/* Zonaprop */}
-      <div className="settings-group">
-        <div className="settings-group-header">Zonaprop — Microservicio scraper</div>
-        <div style={{ padding: '16px 24px' }}>
-          {errors.zonaprop && <div className="alert alert-error" style={{ marginBottom: 12 }}>{errors.zonaprop}</div>}
-          {msgs.zonaprop && <div className="alert alert-success" style={{ marginBottom: 12 }}>{msgs.zonaprop}</div>}
-          <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>URL del microservicio</label>
-          <input
-            type="url"
-            placeholder="https://xxx.trycloudflare.com"
-            value={settings.scraper_service_url}
-            onChange={(e) => set('scraper_service_url', e.target.value)}
-            style={{ maxWidth: 420 }}
-          />
-          <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', margin: '12px 0 4px' }}>Token (opcional)</label>
-          <input
-            type="password"
-            placeholder="Bearer token del servicio"
-            value={settings.scraper_service_token === '***' ? '' : settings.scraper_service_token}
-            onChange={(e) => set('scraper_service_token', e.target.value)}
-            style={{ maxWidth: 420 }}
-          />
-          <div className="settings-actions-row" style={{ marginTop: 14 }}>
-            <button className="btn btn-primary btn-sm" onClick={saveZonaprop} disabled={saving === 'zonaprop'}>
-              {saving === 'zonaprop' && <span className="spinner" />} Guardar
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={testZonaprop}
-              disabled={testing === 'zonaprop' || !settings.scraper_service_url.trim()}>
-              {testing === 'zonaprop' && <span className="spinner" />} Testear
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* MercadoLibre */}
-      <div className="settings-group">
-        <div className="settings-group-header">MercadoLibre — Credenciales de la app</div>
-        <div style={{ padding: '16px 24px' }}>
-          {errors.ml && <div className="alert alert-error" style={{ marginBottom: 12 }}>{errors.ml}</div>}
-          {msgs.ml && <div className="alert alert-success" style={{ marginBottom: 12 }}>{msgs.ml}</div>}
-          <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>App ID</label>
-          <input
-            type="text"
-            placeholder="1234567890"
-            value={settings.ml_app_id}
-            onChange={(e) => set('ml_app_id', e.target.value)}
-            style={{ maxWidth: 320 }}
-          />
-          <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', margin: '12px 0 4px' }}>Secret key</label>
-          <input
-            type="password"
-            placeholder="••••••••••••••••"
-            value={settings.ml_app_secret === '***' ? '' : settings.ml_app_secret}
-            onChange={(e) => set('ml_app_secret', e.target.value)}
-            style={{ maxWidth: 320 }}
-          />
-          <div className="settings-actions-row" style={{ marginTop: 14 }}>
-            <button className="btn btn-primary btn-sm" onClick={saveMl} disabled={saving === 'ml'}>
-              {saving === 'ml' && <span className="spinner" />} Guardar credenciales
-            </button>
-          </div>
-
-          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
-            <p style={{ margin: '0 0 4px', fontSize: 13, color: 'var(--text-muted)' }}>Estado OAuth:</p>
-            {settings.ml_connected ? (
-              <span style={{ fontSize: 14, color: '#16a34a', fontWeight: 600 }}>
-                ● Conectado{settings.ml_user_nickname ? ` · ${settings.ml_user_nickname}` : ''}
-              </span>
-            ) : (
-              <span style={{ fontSize: 14, color: '#94a3b8' }}>● No conectado</span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ── Main Settings page ────────────────────────────────────────────────────────
 
 export default function Settings() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const debugMode = new URLSearchParams(location.search).get('debug') === '1'
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth <= 820
+  })
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth <= 820)
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const topSections = [
     { key: 'config', label: 'Configuración general' },
@@ -767,7 +695,6 @@ export default function Settings() {
     ],
     tecnico: [
       { key: 'params-sistema', label: 'Parámetros del sistema' },
-      { key: 'params-integraciones', label: 'Parámetros de integraciones' },
     ],
   }
 
@@ -782,10 +709,100 @@ export default function Settings() {
     setActiveSidebarItem(sidebarMap[sectionKey]?.[0]?.key)
   }
 
+  function handleMobileNavigate(path) {
+    setMobileDrawerOpen(false)
+    navigate(path)
+  }
+
+  function handleMobileLogout() {
+    setMobileDrawerOpen(false)
+    logout()
+    navigate('/login')
+  }
+
   const sidebarItems = sidebarMap[activeSection] || []
 
   return (
-    <div className="settings-layout">
+    <div className={`settings-layout${isMobile ? ' settings-layout--mobile' : ''}`}>
+
+      {isMobile && (
+        <>
+          <button
+            type="button"
+            className={`home-mobile-drawer-backdrop${mobileDrawerOpen ? ' is-open' : ''}`}
+            onClick={() => setMobileDrawerOpen(false)}
+            aria-label="Cerrar panel lateral"
+          />
+
+          <aside className={`home-mobile-drawer${mobileDrawerOpen ? ' is-open' : ''}`} aria-hidden={!mobileDrawerOpen}>
+            <div className="home-mobile-drawer__header">
+              <div className="home-mobile-drawer__identity">
+                <div className="home-mobile-drawer__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
+                  {initials(user?.username || 'Usuario')}
+                </div>
+                <div>
+                  <strong>{user?.username || 'Usuario'}</strong>
+                  <span>{user?.is_admin ? 'Administrador' : 'Workspace operativo'}</span>
+                </div>
+              </div>
+              <button type="button" className="home-mobile-drawer__close" onClick={() => setMobileDrawerOpen(false)}>
+                ×
+              </button>
+            </div>
+
+            <div className="home-mobile-drawer__actions">
+              <button type="button" className="settings-sidebar-item settings-sidebar-item--active" onClick={() => handleMobileNavigate('/settings')}>
+                Configuración
+              </button>
+              <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/')}>
+                Volver al dashboard
+              </button>
+              {user?.is_approver && (
+                <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/approvals')}>
+                  Aprobaciones
+                </button>
+              )}
+              <button type="button" className="settings-sidebar-item" onClick={handleMobileLogout}>
+                Cerrar sesión
+              </button>
+            </div>
+          </aside>
+
+          <section className="home-mobile-topband settings-mobile-topband">
+            <header className="home-mobile-header">
+              <button
+                type="button"
+                className="home-mobile-user-trigger"
+                onClick={() => setMobileDrawerOpen(true)}
+                aria-expanded={mobileDrawerOpen}
+                aria-label="Abrir panel de usuario"
+              >
+                <span className="home-mobile-user-trigger__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
+                  {initials(user?.username || 'Usuario')}
+                </span>
+                <span className="home-mobile-user-trigger__body">
+                  <span className="home-mobile-user-trigger__name">{user?.username || 'Usuario'}</span>
+                  <span className="home-mobile-user-trigger__meta">Workspace Reval</span>
+                </span>
+              </button>
+              <div className="home-mobile-header__utilities">
+                <button type="button" className="home-mobile-utility-pill" onClick={() => handleMobileNavigate('/')}>
+                  Dashboard
+                </button>
+                <button type="button" className="home-mobile-utility-icon" onClick={() => setMobileDrawerOpen(true)} aria-label="Abrir perfil">
+                  ≡
+                </button>
+              </div>
+            </header>
+
+            <section className="home-mobile-overview settings-mobile-overview">
+              <span className="home-mobile-overview__eyebrow">Configuración</span>
+              <h1>Accesos y parámetros</h1>
+              <p>Ordenamos la configuración para celular con accesos claros, secciones compactas y detalle directo donde más importa.</p>
+            </section>
+          </section>
+        </>
+      )}
 
       {/* Top navigation bar */}
       <nav className="settings-topnav">
@@ -820,10 +837,9 @@ export default function Settings() {
           {activeSidebarItem === 'personalizacion' && <ThemePanel />}
           {activeSidebarItem === 'integraciones' && <IntegrationStatusPanel />}
           {activeSidebarItem === 'equipo' && user?.is_admin && (
-            <UsersPanel currentUser={user} onCurrentUserUpdated={refreshUser} />
+            <UsersPanel currentUser={user} onCurrentUserUpdated={refreshUser} isMobile={isMobile} />
           )}
           {activeSidebarItem === 'params-sistema' && <SystemParamsPanel />}
-          {activeSidebarItem === 'params-integraciones' && <IntegrationParamsPanel />}
         </div>
       </div>
     </div>
