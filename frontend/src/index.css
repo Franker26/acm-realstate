@@ -119,6 +119,132 @@ body {
   padding: 24px 16px;
 }
 
+/* ── Floating calculator ─────────────────────────────────────────────────── */
+
+.float-calc-wrap {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 8000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.float-calc-toggle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary, #1a3a5c);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.float-calc-toggle:hover,
+.float-calc-toggle.is-open {
+  background: var(--primary-dark, #0f2540);
+}
+
+.float-calc-toggle__icon { line-height: 1; }
+
+.float-calc {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+  overflow: hidden;
+  width: 220px;
+}
+
+.float-calc__display {
+  background: #1a1a2e;
+  color: #fff;
+  padding: 12px 14px 10px;
+  text-align: right;
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.float-calc__expr {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 2px;
+}
+
+.float-calc__value {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.float-calc__buttons {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.float-calc__row {
+  display: flex;
+  gap: 5px;
+}
+
+.float-calc__btn {
+  flex: 1;
+  height: 44px;
+  border: none;
+  border-radius: 8px;
+  background: #f2f4f7;
+  color: var(--text, #1a1a2e);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.float-calc__btn:hover { background: #e4e8ef; }
+
+.float-calc__btn--op {
+  background: #e8f0fb;
+  color: var(--primary, #1a3a5c);
+  font-weight: 700;
+}
+
+.float-calc__btn--op:hover { background: #d0e0f5; }
+
+.float-calc__btn--eq {
+  background: var(--primary, #1a3a5c);
+  color: #fff;
+  font-weight: 700;
+}
+
+.float-calc__btn--eq:hover { background: var(--primary-dark, #0f2540); }
+
+.float-calc__btn--clear {
+  background: #fdecea;
+  color: #c62828;
+  font-weight: 700;
+}
+
+.float-calc__btn--clear:hover { background: #fbd0cb; }
+
+.float-calc__btn--zero { flex: 2; }
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 .smart-loader-overlay {
   position: fixed;
   inset: 0;
