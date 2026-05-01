@@ -5965,6 +5965,12 @@ body::before {
     display: none;
   }
 
+  .mobile-loading-shell,
+  .home-mobile-shell {
+    width: 100vw;
+    margin-inline: calc(50% - 50vw);
+  }
+
   .home-mobile-shell {
     display: grid;
     gap: 16px;
