@@ -53,3 +53,7 @@ export const adminChangeUserPassword = (companyId, userId, newPassword) =>
   adminRequest('PUT', `/api/admin/companies/${companyId}/users/${userId}/password`, { new_password: newPassword })
 
 export const adminListAcms = (companyId) => adminRequest('GET', `/api/admin/companies/${companyId}/acms`)
+
+export const adminGetIntegrationSettings = () => adminRequest('GET', '/api/admin/settings/integrations')
+export const adminUpdateIntegrationSettings = (data) => adminRequest('PUT', '/api/admin/settings/integrations', data)
+export const adminCheckIntegrationStatus = () => adminRequest('GET', '/api/admin/settings/integrations/status')
