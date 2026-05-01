@@ -11,8 +11,38 @@ const SOURCE_LABELS = {
   mercadolibre: 'MercadoLibre',
 }
 
+const EMPTY = {
+  scraper_service_url: '',
+  scraper_service_token: '',
+  scraper_service_url_backup: '',
+  scraper_service_token_backup: '',
+}
+
+function nodeFromRaw(data) {
+  return {
+    scraper_service_url: data.scraper_service_url || '',
+    scraper_service_token: data.scraper_service_token === '***' ? '***' : (data.scraper_service_token || ''),
+    scraper_service_url_backup: data.scraper_service_url_backup || '',
+    scraper_service_token_backup: data.scraper_service_token_backup === '***' ? '***' : (data.scraper_service_token_backup || ''),
+  }
+}
+
+function ServerStatus({ label, info }) {
+  if (!info) return null
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <span className={`integration-card__dot integration-card__dot--${info.connected ? 'ok' : 'error'}`} />
+      <span style={{ fontWeight: 500 }}>{label}</span>
+      {info.url && <span style={{ color: '#888', fontSize: '0.8rem' }}>{info.url}</span>}
+      <span style={{ color: info.connected ? 'var(--color-success, #1a8a4a)' : '#c00', fontSize: '0.82rem' }}>
+        {info.connected ? 'Conectado' : 'Sin conexión'}
+      </span>
+    </div>
+  )
+}
+
 export default function AdminSettings() {
-  const [settings, setSettings] = useState({ scraper_service_url: '', scraper_service_token: '' })
+  const [settings, setSettings] = useState(EMPTY)
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -20,19 +50,14 @@ export default function AdminSettings() {
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
 
-  useEffect(() => {
-    load()
-  }, [])
+  useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
       const data = await adminGetIntegrationSettings()
-      setSettings({
-        scraper_service_url: data.scraper_service_url || '',
-        scraper_service_token: data.scraper_service_token === '***' ? '***' : (data.scraper_service_token || ''),
-      })
+      setSettings(nodeFromRaw(data))
     } catch (e) {
       setError(e.message)
     } finally {
@@ -49,15 +74,13 @@ export default function AdminSettings() {
       const payload = {
         scraper_service_url: settings.scraper_service_url.trim() || null,
         scraper_service_token:
-          settings.scraper_service_token === '***'
-            ? '***'
-            : settings.scraper_service_token.trim() || null,
+          settings.scraper_service_token === '***' ? '***' : settings.scraper_service_token.trim() || null,
+        scraper_service_url_backup: settings.scraper_service_url_backup.trim() || null,
+        scraper_service_token_backup:
+          settings.scraper_service_token_backup === '***' ? '***' : settings.scraper_service_token_backup.trim() || null,
       }
       const updated = await adminUpdateIntegrationSettings(payload)
-      setSettings({
-        scraper_service_url: updated.scraper_service_url || '',
-        scraper_service_token: updated.scraper_service_token === '***' ? '***' : (updated.scraper_service_token || ''),
-      })
+      setSettings(nodeFromRaw(updated))
       setSuccess('Configuración guardada.')
     } catch (e) {
       setError(e.message)
@@ -91,34 +114,59 @@ export default function AdminSettings() {
         <h1>Configuración de la plataforma</h1>
       </div>
 
-      <div className="admin-card" style={{ maxWidth: 600 }}>
+      <div className="admin-card" style={{ maxWidth: 640 }}>
         <h2 className="admin-card__title">Microservicio scraper</h2>
         <p className="admin-card__desc">
-          Todas las fuentes de datos (Zonaprop, Argenprop, MercadoLibre) utilizan este servicio centralizado.
+          Zonaprop, Argenprop y MercadoLibre usan este servicio centralizado.
+          Si el servidor principal no responde, el sistema reintenta automáticamente con el backup.
         </p>
 
         {loading ? (
           <p>Cargando…</p>
         ) : (
           <form onSubmit={handleSave} className="admin-form">
+
+            <p className="admin-form__section-label">Servidor principal</p>
             <div className="admin-form__field">
-              <label className="admin-form__label">URL del scraper</label>
+              <label className="admin-form__label">URL</label>
               <input
                 className="admin-input"
                 type="url"
-                placeholder="https://scraper.ejemplo.com"
+                placeholder="https://scraper-principal.ejemplo.com"
                 value={settings.scraper_service_url}
                 onChange={(e) => set('scraper_service_url', e.target.value)}
               />
             </div>
             <div className="admin-form__field">
-              <label className="admin-form__label">Token de autenticación</label>
+              <label className="admin-form__label">Token</label>
               <input
                 className="admin-input"
                 type="password"
                 placeholder={settings.scraper_service_token === '***' ? '(guardado)' : 'Token Bearer'}
                 value={settings.scraper_service_token === '***' ? '' : settings.scraper_service_token}
                 onChange={(e) => set('scraper_service_token', e.target.value)}
+              />
+            </div>
+
+            <p className="admin-form__section-label" style={{ marginTop: '1.25rem' }}>Servidor de backup</p>
+            <div className="admin-form__field">
+              <label className="admin-form__label">URL</label>
+              <input
+                className="admin-input"
+                type="url"
+                placeholder="https://scraper-backup.ejemplo.com"
+                value={settings.scraper_service_url_backup}
+                onChange={(e) => set('scraper_service_url_backup', e.target.value)}
+              />
+            </div>
+            <div className="admin-form__field">
+              <label className="admin-form__label">Token</label>
+              <input
+                className="admin-input"
+                type="password"
+                placeholder={settings.scraper_service_token_backup === '***' ? '(guardado)' : 'Token Bearer'}
+                value={settings.scraper_service_token_backup === '***' ? '' : settings.scraper_service_token_backup}
+                onChange={(e) => set('scraper_service_token_backup', e.target.value)}
               />
             </div>
 
@@ -142,14 +190,10 @@ export default function AdminSettings() {
         )}
 
         {status && (
-          <div className="admin-status-panel" style={{ marginTop: '1.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              <span
-                className={`integration-card__dot integration-card__dot--${status.connected ? 'ok' : 'error'}`}
-              />
-              <strong>{status.connected ? 'Conectado' : 'Sin conexión'}</strong>
-            </div>
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div className="admin-status-panel" style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <ServerStatus label="Principal" info={status.primary} />
+            {status.backup?.url && <ServerStatus label="Backup" info={status.backup} />}
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
               {(status.sources || []).map((key) => (
                 <span key={key} className="settings-badge settings-badge--admin" style={{ fontSize: '0.78rem' }}>
                   {SOURCE_LABELS[key] || key}

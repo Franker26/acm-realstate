@@ -354,6 +354,8 @@ def _get_scraper_settings(db: Session) -> dict:
     return {
         "scraper_service_url": _get_platform_setting(db, "scraper_service_url") or _SCRAPER_SERVICE_URL,
         "scraper_service_token": _get_platform_setting(db, "scraper_service_token") or _SCRAPER_SERVICE_TOKEN,
+        "scraper_service_url_backup": _get_platform_setting(db, "scraper_service_url_backup"),
+        "scraper_service_token_backup": _get_platform_setting(db, "scraper_service_token_backup"),
     }
 
 
@@ -978,7 +980,24 @@ async def extract_property(body: ExtractRequest, request: Request, db: Session =
     from integrations import extract as integration_extract
     _current_user(request, db)
     settings = _get_scraper_settings(db)
-    return await integration_extract(body.url.strip(), settings)
+
+    # Try primary scraper
+    primary_err: Exception | None = None
+    try:
+        return await integration_extract(body.url.strip(), settings)
+    except Exception as exc:
+        primary_err = exc
+
+    # Failover to backup scraper if configured
+    backup_url = (settings.get("scraper_service_url_backup") or "").strip()
+    if backup_url:
+        backup_settings = {
+            "scraper_service_url": backup_url,
+            "scraper_service_token": settings.get("scraper_service_token_backup") or "",
+        }
+        return await integration_extract(body.url.strip(), backup_settings)
+
+    raise primary_err
 
 
 # ── Admin endpoints (/api/admin/*) ────────────────────────────────────────────
@@ -1156,6 +1175,20 @@ def admin_list_company_acms(company_id: int, request: Request, db: Session = Dep
 class GlobalIntegrationSettings(PydanticBase):
     scraper_service_url: Optional[str] = None
     scraper_service_token: Optional[str] = None
+    scraper_service_url_backup: Optional[str] = None
+    scraper_service_token_backup: Optional[str] = None
+
+
+async def _check_scraper_health(url: str, token: str) -> bool:
+    if not url:
+        return False
+    try:
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"{url.rstrip('/')}/health", headers=headers)
+        return r.status_code == 200
+    except Exception:
+        return False
 
 
 @app.get("/api/admin/settings/integrations")
@@ -1165,6 +1198,8 @@ def admin_get_integration_settings(request: Request, db: Session = Depends(get_d
     return GlobalIntegrationSettings(
         scraper_service_url=raw.get("scraper_service_url"),
         scraper_service_token="***" if raw.get("scraper_service_token") else None,
+        scraper_service_url_backup=raw.get("scraper_service_url_backup"),
+        scraper_service_token_backup="***" if raw.get("scraper_service_token_backup") else None,
     )
 
 
@@ -1175,6 +1210,10 @@ def admin_update_integration_settings(body: GlobalIntegrationSettings, request: 
         _save_platform_setting(db, "scraper_service_url", body.scraper_service_url.strip())
     if body.scraper_service_token is not None and body.scraper_service_token != "***":
         _save_platform_setting(db, "scraper_service_token", body.scraper_service_token.strip())
+    if body.scraper_service_url_backup is not None:
+        _save_platform_setting(db, "scraper_service_url_backup", body.scraper_service_url_backup.strip())
+    if body.scraper_service_token_backup is not None and body.scraper_service_token_backup != "***":
+        _save_platform_setting(db, "scraper_service_token_backup", body.scraper_service_token_backup.strip())
     return admin_get_integration_settings(request, db)
 
 
@@ -1182,22 +1221,18 @@ def admin_update_integration_settings(body: GlobalIntegrationSettings, request: 
 async def admin_integration_status(request: Request, db: Session = Depends(get_db)):
     _require_superadmin(request, db)
     raw = _get_scraper_settings(db)
-    scraper_url = (raw.get("scraper_service_url") or "").strip()
+    primary_url = (raw.get("scraper_service_url") or "").strip()
+    backup_url = (raw.get("scraper_service_url_backup") or "").strip()
 
-    connected = False
-    if scraper_url:
-        try:
-            token = raw.get("scraper_service_token", "")
-            headers = {"Authorization": f"Bearer {token}"} if token else {}
-            async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.get(f"{scraper_url}/health", headers=headers)
-            connected = r.status_code == 200
-        except Exception:
-            connected = False
+    primary_ok, backup_ok = await asyncio.gather(
+        _check_scraper_health(primary_url, raw.get("scraper_service_token", "") or ""),
+        _check_scraper_health(backup_url, raw.get("scraper_service_token_backup", "") or ""),
+    )
 
     return {
-        "connected": connected,
-        "scraper_url": scraper_url or None,
+        "connected": primary_ok or backup_ok,
+        "primary": {"url": primary_url or None, "connected": primary_ok},
+        "backup": {"url": backup_url or None, "connected": backup_ok},
         "sources": ["zonaprop", "argenprop", "mercadolibre"],
     }
 
