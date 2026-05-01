@@ -422,3 +422,26 @@ class StageUpdateRequest(BaseModel):
     @classmethod
     def normalize(cls, v):
         return _coerce_stage(v)
+
+
+class ModifierOptionCreate(BaseModel):
+    factor_key: str
+    option_label: str
+    factor_value: float = 1.0
+
+
+class ModifierOptionUpdate(BaseModel):
+    option_label: Optional[str] = None
+    factor_value: Optional[float] = None
+
+
+class ModifierOptionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    company_id: int
+    factor_key: str
+    option_label: str
+    factor_value: float
+    created_at: datetime
+    updated_at: Optional[datetime] = None
