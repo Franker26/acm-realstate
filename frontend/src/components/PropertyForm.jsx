@@ -6,6 +6,21 @@ const ESTADOS = ['Refaccionado', 'Standard', 'A refaccionar']
 const CALIDADES = ['Superior', 'Standard', 'Inferior']
 const DISTRIBUCIONES = ['Buena', 'Regular']
 
+// Adjustment factor hints per option, relative to a Standard/Buena/Norte subject baseline.
+// Values represent the typical factor when this option is the comparable (vs. Standard subject).
+const FACTOR_HINTS = {
+  estado: { Refaccionado: -10, Standard: 0, 'A refaccionar': +10 },
+  calidad: { Superior: -10, Standard: 0, Inferior: +10 },
+  distribucion: { Buena: 0, Regular: +5 },
+  orientacion: { Norte: 0, Sur: +5, Este: 0, Oeste: 0, Interno: +10 },
+}
+
+function withHint(field, label) {
+  const pct = FACTOR_HINTS[field]?.[label]
+  if (pct === undefined || pct === 0) return label
+  return `${label} (${pct > 0 ? '+' : ''}${pct}%)`
+}
+
 function homogeneizada(v) {
   const cub = parseFloat(v.superficie_cubierta) || 0
   const semi = parseFloat(v.superficie_semicubierta) || 0
@@ -93,7 +108,7 @@ export default function PropertyForm({ values, onChange, errors = {}, hideTipo =
           <label>Estado</label>
           <select name="estado" value={values.estado || ''} onChange={handle} tabIndex={7}>
             <option value="">Seleccionar...</option>
-            {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
+            {ESTADOS.map((e) => <option key={e} value={e}>{withHint('estado', e)}</option>)}
           </select>
         </div>
 
@@ -101,7 +116,7 @@ export default function PropertyForm({ values, onChange, errors = {}, hideTipo =
           <label>Calidad</label>
           <select name="calidad" value={values.calidad || ''} onChange={handle} tabIndex={8}>
             <option value="">Seleccionar...</option>
-            {CALIDADES.map((c) => <option key={c} value={c}>{c}</option>)}
+            {CALIDADES.map((c) => <option key={c} value={c}>{withHint('calidad', c)}</option>)}
           </select>
         </div>
 
@@ -109,7 +124,7 @@ export default function PropertyForm({ values, onChange, errors = {}, hideTipo =
           <label>Distribución</label>
           <select name="distribucion" value={values.distribucion || ''} onChange={handle} tabIndex={9}>
             <option value="">Seleccionar...</option>
-            {DISTRIBUCIONES.map((d) => <option key={d} value={d}>{d}</option>)}
+            {DISTRIBUCIONES.map((d) => <option key={d} value={d}>{withHint('distribucion', d)}</option>)}
           </select>
         </div>
       </div>
@@ -121,7 +136,7 @@ export default function PropertyForm({ values, onChange, errors = {}, hideTipo =
           <label>Orientación</label>
           <select name="orientacion" value={values.orientacion || ''} onChange={handle} tabIndex={10}>
             <option value="">Seleccionar...</option>
-            {ORIENTACIONES.map((o) => <option key={o} value={o}>{o}</option>)}
+            {ORIENTACIONES.map((o) => <option key={o} value={o}>{withHint('orientacion', o)}</option>)}
           </select>
         </div>
 
