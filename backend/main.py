@@ -126,16 +126,20 @@ from schemas import (
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
-        # Postgres-specific column migrations (no-ops on SQLite if column exists)
+        # Column migrations — each statement is tried individually.
+        # "duplicate column" errors are caught and ignored (idempotent).
+        # IF NOT EXISTS is omitted for SQLite compatibility.
         for stmt in (
-            "ALTER TABLE acm ALTER COLUMN stage TYPE VARCHAR USING stage::text",
-            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS current_step VARCHAR DEFAULT 'sujeto'",
-            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS steps_completed VARCHAR DEFAULT '[]'",
-            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP",
-            # Multi-tenant columns
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superadmin BOOLEAN DEFAULT FALSE",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id INTEGER",
-            "ALTER TABLE acm ADD COLUMN IF NOT EXISTS company_id INTEGER",
+            "ALTER TABLE acm ALTER COLUMN stage TYPE VARCHAR USING stage::text",  # PG only, ignored on SQLite
+            "ALTER TABLE acm ADD COLUMN current_step VARCHAR DEFAULT 'sujeto'",
+            "ALTER TABLE acm ADD COLUMN steps_completed VARCHAR DEFAULT '[]'",
+            "ALTER TABLE acm ADD COLUMN deleted_at TIMESTAMP",
+            "ALTER TABLE users ADD COLUMN is_superadmin BOOLEAN DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN company_id INTEGER",
+            "ALTER TABLE acm ADD COLUMN company_id INTEGER",
+            "ALTER TABLE acm ADD COLUMN approval_status VARCHAR DEFAULT 'No requerida'",
+            "ALTER TABLE acm ADD COLUMN approved_by_id INTEGER",
+            "ALTER TABLE acm ADD COLUMN approved_at TIMESTAMP",
         ):
             try:
                 db.execute(text(stmt))
