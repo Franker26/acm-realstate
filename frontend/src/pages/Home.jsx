@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, updateACM } from '../api.js'
 import { useAuth, useWizard } from '../App.jsx'
-import { MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
+import { LoadingState, MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
 
 const COLUMNS = [
   { key: 'nuevo', title: 'Nuevo', description: 'Tasaciones recién creadas o pendientes de completar.', tone: 'blue' },
@@ -96,6 +96,10 @@ export default function Home() {
   const [quickDraft, setQuickDraft] = useState({ nombre: '', direccion: '' })
   const [quickErrors, setQuickErrors] = useState({})
   const [routeTransition, setRouteTransition] = useState(null)
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth <= 820
+  })
   const { dispatch } = useWizard()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -105,6 +109,15 @@ export default function Home() {
       .then(setAcms)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth <= 820)
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   useEffect(() => {
@@ -227,17 +240,6 @@ export default function Home() {
         messages={routeTransition === 'approvals'
           ? ['Entrando a aprobaciones...', 'Buscando tasaciones pendientes...', 'Preparando revisión rápida...']
           : ['Volviendo al dashboard...', 'Sincronizando tasaciones...', 'Ordenando el tablero móvil...']}
-        metrics={routeTransition === 'approvals'
-          ? [
-              { label: 'Pendientes', value: mobileOverview.pendingApprovals },
-              { label: 'Activos', value: mobileOverview.inFlight },
-              { label: 'Workspace', value: 'Mobile' },
-            ]
-          : [
-              { label: 'Activos', value: mobileOverview.inFlight },
-              { label: 'Pendientes', value: mobileOverview.pendingApprovals },
-              { label: 'Finalizados', value: mobileOverview.completed },
-            ]}
       />
     )
   }
@@ -337,17 +339,22 @@ export default function Home() {
       </div>
 
       {loading && (
-        <MobileWorkspaceLoading
-          eyebrow="Carga de panel"
-          title="Estamos preparando el dashboard"
-          subtitle="Sincronizamos tasaciones, métricas y etapas del equipo para que el tablero abra listo en mobile."
-          messages={['Cargando tablero...', 'Preparando workspace...', 'Sincronizando datos...']}
-          metrics={[
-            { label: 'Vista', value: 'Mobile' },
-            { label: 'Flujo', value: 'ACMs' },
-            { label: 'Estado', value: 'Sync' },
-          ]}
-        />
+        isMobile ? (
+          <MobileWorkspaceLoading
+            eyebrow="Carga de panel"
+            title="Estamos preparando el dashboard"
+            subtitle="Sincronizamos tasaciones, métricas y etapas del equipo para que el tablero abra listo en mobile."
+            messages={['Cargando tablero...', 'Preparando workspace...', 'Sincronizando datos...']}
+          />
+        ) : (
+          <LoadingState
+            eyebrow="Carga de panel"
+            title="Estamos preparando el dashboard"
+            subtitle="Sincronizamos tasaciones, métricas y etapas del equipo para que el tablero abra listo en escritorio."
+            messages={['Cargando tablero...', 'Preparando workspace...', 'Sincronizando datos...']}
+            mode="inline"
+          />
+        )
       )}
 
       {error && !loading && (
