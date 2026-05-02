@@ -141,13 +141,8 @@ const STEPS = [
 function WizardNavInner({ currentStep }) {
   const { state } = useWizard()
   const { user } = useAuth()
-  const location = useLocation()
   const navigate = useNavigate()
   const acmId = state.acmId
-  const progress = Math.round((currentStep / STEPS.length) * 100)
-  const appName = getSavedAppName()
-  const logo = getSavedLogo()
-  const currentPath = location.pathname
 
   function goToStep(num) {
     if (!acmId) return
@@ -158,43 +153,19 @@ function WizardNavInner({ currentStep }) {
   return (
     <section className="wizard-shell" aria-label="Pipeline de confección">
       <div className="wizard-shell__header">
-        <div className="wizard-shell__header-main">
-          <button type="button" className="wizard-shell__back" onClick={() => navigate('/')}>
-            ← Dashboard
-          </button>
-          <div className="wizard-shell__brand">
-            <span className="wizard-shell__brand-mark">
-              {logo ? (
-                <img src={logo} alt={`${appName} logo`} className="wizard-shell__brand-logo" />
-              ) : (
-                <span>{appName.slice(0, 1).toUpperCase()}</span>
-              )}
-            </span>
-            <div>
-              <span className="wizard-shell__eyebrow">Pipeline</span>
-              <strong>Confección de tasación</strong>
+        <button type="button" className="wizard-shell__back" onClick={() => navigate('/')}>
+          ← Dashboard
+        </button>
+        {user && (
+          <div className="wizard-shell__user">
+            <div className="wizard-shell__user-avatar">
+              {user.username.slice(0, 1).toUpperCase()}
+            </div>
+            <div className="wizard-shell__user-copy">
+              <strong>{user.username}</strong>
             </div>
           </div>
-        </div>
-        <div className="wizard-shell__header-side">
-          <div className="wizard-shell__progress" aria-label={`Progreso ${progress}%`}>
-            <span>{currentStep} de {STEPS.length}</span>
-            <div className="wizard-shell__progress-track" aria-hidden="true">
-              <div className="wizard-shell__progress-fill" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-          {user && (
-            <div className="wizard-shell__user">
-              <div className="wizard-shell__user-avatar">
-                {user.username.slice(0, 1).toUpperCase()}
-              </div>
-              <div className="wizard-shell__user-copy">
-                <strong>{user.username}</strong>
-                <span>{currentPath.includes('/step/') ? `Paso ${currentStep}` : 'Workspace'}</span>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       <nav className="wizard-nav">

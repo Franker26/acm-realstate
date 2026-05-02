@@ -227,7 +227,7 @@ function FactorSlider({ factorKey, label, tooltip, value, recommendation, contex
   }
 
   return (
-    <div className={`factor-row factor-row--${tone.className}`}>
+    <div className={`factor-row factor-row--${tone.className} factor-row--${inputMode}`}>
       <span className="factor-row-label">
         {label}
         {tooltip && (
@@ -288,7 +288,9 @@ function FactorSlider({ factorKey, label, tooltip, value, recommendation, contex
         {context && <div className="factor-context">{context}</div>}
       </div>
       <span className={`factor-row-pct factor-row-pct--${tone.className}`}>{pctLabel(value)}</span>
-      <span className={`factor-row-val factor-row-val--${tone.className}`}>{value.toFixed(3)}</span>
+      {inputMode === 'slider' && (
+        <span className={`factor-row-val factor-row-val--${tone.className}`}>{value.toFixed(3)}</span>
+      )}
     </div>
   )
 }
@@ -454,17 +456,6 @@ export default function AplicarPonderadores() {
   return (
     <div>
       <WizardNav currentStep={3} />
-      <div className="step-header">
-        <span className="page-eyebrow">Paso 3</span>
-        <h1>Ponderadores de ajuste</h1>
-        <p>
-          Ajustá cada comparable contra el sujeto con una lectura más simple:
-          <span className="ponderadores-accent ponderadores-accent--danger"> rojo</span> cuando el factor cae por debajo de 1.000,
-          <span className="ponderadores-accent ponderadores-accent--success"> verde</span> cuando supera 1.000
-          y mayor intensidad cuanto más fuerte sea el ajuste. La marca del sistema sigue mostrando el valor recomendado.
-        </p>
-      </div>
-
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="workflow-toolbar">
@@ -516,6 +507,10 @@ export default function AplicarPonderadores() {
             {advancedMode ? 'Modo avanzado activo' : 'Activar modo avanzado'}
           </button>
         </div>
+      </div>
+
+      <div className="alert alert-info alert-info--compact ponderadores-note">
+        Rojo: factor menor a <strong>1.000</strong>. Verde: factor mayor a <strong>1.000</strong>. La intensidad acompaña el tamaño del ajuste y la aguja sigue marcando la recomendación del sistema.
       </div>
 
       {advancedMode && (
