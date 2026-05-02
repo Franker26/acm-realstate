@@ -11,6 +11,8 @@ import {
   adminUpdateUser,
 } from '../../adminApi.js'
 import { LoadingState } from '../../components/StatusState.jsx'
+import { useConfirm } from '../../App.jsx'
+import InlineNotice from '../../components/InlineNotice.jsx'
 
 function UsersSection({ companyId }) {
   const [users, setUsers] = useState([])
@@ -20,6 +22,7 @@ function UsersSection({ companyId }) {
   const [adding, setAdding] = useState(false)
   const [pwdEdit, setPwdEdit] = useState({})
   const [savingPwd, setSavingPwd] = useState({})
+  const confirm = useConfirm()
 
   useEffect(() => {
     adminListUsers(companyId).then(setUsers).catch((e) => setError(e.message))
@@ -43,7 +46,16 @@ function UsersSection({ companyId }) {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('¿Eliminar este usuario?')) return
+    const accepted = await confirm({
+      tone: 'danger',
+      eyebrow: 'Eliminar usuario',
+      title: 'Se va a quitar este usuario de la empresa',
+      description: 'El acceso quedará inhabilitado para este workspace.',
+      confirmLabel: 'Eliminar usuario',
+      cancelLabel: 'Mantener usuario',
+    })
+    if (!accepted) return
+
     setError(null)
     try {
       await adminDeleteUser(companyId, id)
@@ -90,7 +102,7 @@ function UsersSection({ companyId }) {
         </button>
       </div>
 
-      {error && <div className="admin-alert admin-alert--error">{error}</div>}
+      {error && <InlineNotice tone="error" title="No pudimos actualizar los usuarios" description={error} className="notice--spaced" />}
 
       {showAdd && (
         <form onSubmit={handleAdd} className="admin-inline-form admin-inline-form--block">
@@ -338,7 +350,7 @@ export default function AdminCompanyDetail() {
         </div>
       </div>
 
-      {error && <div className="admin-alert admin-alert--error">{error}</div>}
+      {error && <InlineNotice tone="error" title="No pudimos actualizar la empresa" description={error} className="notice--spaced" />}
 
       <UsersSection companyId={companyId} />
       <AcmsSection companyId={companyId} />

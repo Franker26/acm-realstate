@@ -1,3 +1,5 @@
+import { getFriendlyErrorMessage } from './utils/feedback.js'
+
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 function getAdminToken() {
@@ -14,12 +16,12 @@ async function adminRequest(method, path, body) {
   if (res.status === 401 || res.status === 403) {
     localStorage.removeItem('acm_admin_token')
     if (window.location.pathname !== '/admin') window.location.assign('/admin')
-    throw new Error('Sesión expirada')
+    throw new Error(getFriendlyErrorMessage('Sesión expirada'))
   }
   if (!res.ok) {
     let detail = `HTTP ${res.status}`
     try { const err = await res.json(); detail = err.detail || detail } catch {}
-    throw new Error(detail)
+    throw new Error(getFriendlyErrorMessage(detail))
   }
   if (res.status === 204) return null
   return res.json()
@@ -34,7 +36,7 @@ export async function adminLogin(username, password) {
   if (!res.ok) {
     let detail = 'Error de autenticación'
     try { detail = (await res.json()).detail || detail } catch {}
-    throw new Error(detail)
+    throw new Error(getFriendlyErrorMessage(detail, 'No pudimos validar tus datos. Revisá usuario y contraseña e intentá nuevamente.'))
   }
   return res.json()
 }
