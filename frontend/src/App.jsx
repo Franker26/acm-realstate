@@ -138,6 +138,12 @@ function avatarColor(seed = '') {
   return `hsl(${hue}, 55%, 46%)`
 }
 
+function userRoleLabel(user) {
+  if (user?.is_approver) return 'Admin approver'
+  if (user?.is_admin) return 'Administrador'
+  return 'Workspace operativo'
+}
+
 function WizardProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState)
   const chartRef = useRef(null)
@@ -414,15 +420,185 @@ function AppRoutes() {
   )
 }
 
+function WorkspaceSidebar() {
+  const { user, logout } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [logo, setLogo] = useState(() => getSavedLogo())
+  const [appName, setAppName] = useState(() => getSavedAppName())
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    function onStorage(e) {
+      if (e.key === 'acm_theme_logo') setLogo(e.newValue)
+      if (e.key === 'acm_theme_name') setAppName(e.newValue || 'ACM Real Estate')
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  useEffect(() => {
+    function onThemeChange() {
+      setLogo(getSavedLogo())
+      setAppName(getSavedAppName())
+    }
+    window.addEventListener('acm_theme_changed', onThemeChange)
+    return () => window.removeEventListener('acm_theme_changed', onThemeChange)
+  }, [])
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
+
+  const navItems = [
+    {
+      key: 'dashboard',
+      label: 'Dashboard',
+      description: 'Tablero operativo de tasaciones',
+      note: 'Vista general',
+      to: '/',
+      visible: true,
+      active: location.pathname === '/',
+    },
+    {
+      key: 'approvals',
+      label: 'Aprobaciones',
+      description: 'Cola de revisión del equipo',
+      note: 'Pendientes y feedback',
+      to: '/approvals',
+      visible: user?.is_approver,
+      active: location.pathname.startsWith('/approvals'),
+    },
+    {
+      key: 'settings',
+      label: 'Configuración',
+      description: 'Marca, usuarios y preferencias',
+      note: 'Workspace',
+      to: '/settings',
+      visible: Boolean(user),
+      active: location.pathname.startsWith('/settings'),
+    },
+  ].filter((item) => item.visible)
+
+  function handleLogout() {
+    logout()
+    navigate('/login')
+  }
+
+  return (
+    <aside className="workspace-sidebar" aria-label="Navegación del workspace">
+      <section className="home-panel home-panel--brand">
+        <div className="home-workspace-card">
+          <span className="home-workspace-card__mark">
+            {logo ? (
+              <img src={logo} alt={`${appName} logo`} className="home-workspace-card__logo" />
+            ) : (
+              <span>{appName.slice(0, 1).toUpperCase()}</span>
+            )}
+          </span>
+          <div>
+            <span className="home-panel__eyebrow">Workspace</span>
+            <strong>{appName}</strong>
+            <p>{user?.is_admin ? 'Vista de coordinación del equipo.' : 'Centro operativo personal.'}</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className={`home-workspace-menu-toggle${menuOpen ? ' is-open' : ''}`}
+          aria-expanded={menuOpen}
+          aria-controls="workspace-nav-menu"
+          onClick={() => setMenuOpen((current) => !current)}
+        >
+          <span className="home-workspace-menu-toggle__copy">
+            <strong>Accesos</strong>
+            <small>Explorar workspace</small>
+          </span>
+          <span className="home-workspace-menu-toggle__chevron" aria-hidden="true">⌄</span>
+        </button>
+
+        <div
+          id="workspace-nav-menu"
+          className={`home-workspace-menu${menuOpen ? ' is-open' : ''}`}
+          aria-hidden={!menuOpen}
+        >
+          <div className="home-panel__header home-panel__header--menu">
+            <div>
+              <span className="home-panel__eyebrow">Navegación</span>
+              <strong>Accesos principales</strong>
+            </div>
+          </div>
+
+          <div className="home-rail-nav">
+            {navItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={`home-rail-nav__item${item.active ? ' is-active' : ''}`}
+                onClick={() => navigate(item.to)}
+              >
+                <span>{item.label}</span>
+                <strong>{item.description}</strong>
+                <small>{item.note}</small>
+              </button>
+            ))}
+          </div>
+
+          <div className="home-workspace-menu__footer">
+            <div className="home-user-card">
+              <div className="home-user-card__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
+                {initials(user?.username || 'Usuario')}
+              </div>
+              <div>
+                <strong>{user?.username || 'Usuario'}</strong>
+                <p>{userRoleLabel(user)}</p>
+              </div>
+            </div>
+            <button type="button" className="home-user-card__logout" onClick={handleLogout}>
+              Cerrar sesión
+            </button>
+          </div>
+        </div>
+      </section>
+    </aside>
+  )
+}
+
 function AppShell() {
   const location = useLocation()
   const isErrorRoute = location.pathname.startsWith('/error') || location.pathname === '/404'
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth <= 820
+  })
+
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth <= 820)
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  const isWorkflowRoute = location.pathname.startsWith('/acm/')
+  const isWorkspaceRoute = location.pathname === '/' || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/settings')
+  const showWorkspaceSidebar = isWorkspaceRoute && !isWorkflowRoute && !isMobile
 
   return (
     <>
       <AppHeader />
-      <main className={`app-main${isErrorRoute ? ' app-main--error' : ''}`}>
-        <AppRoutes />
+      <main className={`app-main${isErrorRoute ? ' app-main--error' : ''}${showWorkspaceSidebar ? ' app-main--workspace' : ''}`}>
+        {showWorkspaceSidebar ? (
+          <div className="workspace-layout">
+            <WorkspaceSidebar />
+            <div className="workspace-layout__content">
+              <AppRoutes />
+            </div>
+          </div>
+        ) : (
+          <AppRoutes />
+        )}
       </main>
       {!isErrorRoute ? <FloatingCalculator /> : null}
     </>
