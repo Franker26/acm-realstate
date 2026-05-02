@@ -54,6 +54,19 @@ function homoM2(comp) {
   return h > 0 ? h : comp.superficie_cubierta
 }
 
+function sourceLabel(url) {
+  if (!url) return null
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return null
+  }
+}
+
+function comparableLabel(comp, index) {
+  return comp.direccion || sourceLabel(comp.url) || `Comparable ${index + 1}`
+}
+
 export default function AgregarComparables() {
   const { id } = useParams()
   const [comparables, setComparables] = useState([])
@@ -76,7 +89,6 @@ export default function AgregarComparables() {
     getACM(id).then((acm) => {
       setComparables(acm.comparables)
       dispatch({ type: 'SET_ACM_ID', payload: acm.id })
-      // Show form immediately only when there are no comparables yet
       setShowForm(acm.comparables.length === 0)
       setPageReady(true)
     })
@@ -90,20 +102,21 @@ export default function AgregarComparables() {
   function validate(v) {
     const err = {}
     if (!v.precio || Number(v.precio) <= 0) err.precio = 'Requerido'
-    if (!v.superficie_cubierta || Number(v.superficie_cubierta) <= 0)
+    if (!v.superficie_cubierta || Number(v.superficie_cubierta) <= 0) {
       err.superficie_cubierta = 'Debe ser mayor a 0'
+    }
     return err
   }
 
   const SUPPORTED_SOURCES = ['zonaprop.com.ar', 'argenprop.com', 'mercadolibre.com.ar']
   const isSupportedUrl = SUPPORTED_SOURCES.some((s) => form.url?.includes(s))
+  const currentSource = sourceLabel(form.url)
 
   async function handleExtract() {
     if (!form.url || !isSupportedUrl) return
     setExtracting(true)
     setRetrying(false)
     setExtractError(null)
-    // Show "Reintentando..." if primary takes too long (likely failing over to backup)
     retryTimerRef.current = setTimeout(() => setRetrying(true), 10_000)
     try {
       const data = await extractProperty(form.url)
@@ -135,7 +148,10 @@ export default function AgregarComparables() {
   async function handleSubmit(e) {
     e.preventDefault()
     const err = validate(form)
-    if (Object.keys(err).length) { setErrors(err); return }
+    if (Object.keys(err).length) {
+      setErrors(err)
+      return
+    }
     setSubmitting(true)
     setApiError(null)
     try {
@@ -205,171 +221,252 @@ export default function AgregarComparables() {
     <div>
       <SmartLoader loading={extracting} logoSrc={logoSrc} message={retrying ? 'Reintentando extracción...' : undefined} />
       <WizardNav currentStep={2} />
-      <div className="step-header">
+
+      <div className="step-header step-header--compact">
         <span className="page-eyebrow">Paso 2</span>
-        <h1>Agregar Comparables</h1>
-        <p>Cargá las propiedades comparables extraídas de ZonaProp, Argenprop, etc.</p>
+        <h1>Agregar comparables</h1>
+        <p>Construí la base de mercado con publicaciones útiles, extracción asistida y una lectura clara antes de pasar a ponderadores.</p>
       </div>
 
-      {apiError && <div className="alert alert-error">{apiError}</div>}
+      <div className="workflow-layout workflow-layout--single">
+        <div className="workflow-main">
+          {apiError && <div className="alert alert-error">{apiError}</div>}
 
-      {comparables.length > 0 && (
-        <div className="card workflow-card">
-          <div className="section-heading">
-            <div>
-              <span className="section-heading__eyebrow">Base cargada</span>
-              <h2>Comparables activas ({comparables.length})</h2>
-            </div>
-          </div>
-          <div className="table-wrapper">
-            <table className="workspace-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Dirección / URL</th>
-                  <th>Precio USD</th>
-                  <th>Sup. hom. m²</th>
-                  <th>USD/m²</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparables.map((c, i) => {
-                  const h = homoM2(c)
-                  const pm2 = c.precio_m2_publicado ?? Math.round(c.precio / c.superficie_cubierta)
-                  return (
-                    <tr key={c.id}>
-                      <td>{i + 1}</td>
-                      <td className="workspace-table__cell-ellipsis">
-                        {c.direccion || c.url || '—'}
-                        {c.url && (
-                          <a
-                            href={c.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="table-url-link"
-                            title="Abrir publicación"
-                          >
-                            ↗
-                          </a>
-                        )}
-                      </td>
-                      <td>USD {c.precio.toLocaleString('es-AR')}</td>
-                      <td>{h.toFixed(1)} m²</td>
-                      <td>USD {Math.round(pm2).toLocaleString('es-AR')}</td>
-                      <td>
-                        <div className="table-actions">
-                          <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(c)}>Editar</button>
-                          <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.id)}>×</button>
-                        </div>
-                      </td>
+          <section className="workflow-stats-grid" aria-label="Resumen del paso">
+            <article className="workflow-stat-card">
+              <span className="workflow-stat-card__label">Comparables cargadas</span>
+              <strong>{comparables.length}</strong>
+              <p>{comparables.length > 0 ? 'Muestra activa para revisar.' : 'Todavía no hay base inicial.'}</p>
+            </article>
+            <article className="workflow-stat-card">
+              <span className="workflow-stat-card__label">Portales soportados</span>
+              <strong>{SUPPORTED_SOURCES.length}</strong>
+              <p>{currentSource ? `Detectamos ${currentSource}.` : 'Zonaprop, Argenprop y Mercado Libre.'}</p>
+            </article>
+            <article className="workflow-stat-card">
+              <span className="workflow-stat-card__label">Paso siguiente</span>
+              <strong>{comparables.length > 0 ? 'Ponderadores listos' : 'Esperando muestra mínima'}</strong>
+              <p>{comparables.length > 0 ? 'Podés seguir al paso 3 cuando cierres esta base.' : 'Necesitás al menos una comparable para continuar.'}</p>
+            </article>
+          </section>
+
+          {comparables.length > 0 && (
+            <div className="card workflow-card">
+              <div className="section-heading">
+                <div>
+                  <span className="section-heading__eyebrow">Base cargada</span>
+                  <h2>Comparables activas ({comparables.length})</h2>
+                </div>
+              </div>
+              <div className="table-wrapper">
+                <table className="workspace-table workspace-table--comparables">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Comparable</th>
+                      <th>Fuente</th>
+                      <th>Mercado</th>
+                      <th>Precio USD</th>
+                      <th>Sup. hom. m²</th>
+                      <th>USD/m²</th>
+                      <th>Acciones</th>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {showForm ? (
-        <div className="card workflow-card">
-          <div className="section-heading">
-            <div>
-              <span className="section-heading__eyebrow">{editId ? 'Edición' : 'Carga manual'}</span>
-              <h2>{editId ? 'Editar comparable' : 'Nueva comparable'}</h2>
+                  </thead>
+                  <tbody>
+                    {comparables.map((c, i) => {
+                      const h = homoM2(c)
+                      const pm2 = c.precio_m2_publicado ?? Math.round(c.precio / c.superficie_cubierta)
+                      const source = sourceLabel(c.url)
+                      return (
+                        <tr key={c.id}>
+                          <td className="workspace-table__index">{i + 1}</td>
+                          <td className="workspace-table__cell-ellipsis">
+                            <div className="workspace-table__primary workspace-table__primary--comparable">
+                              <strong>{comparableLabel(c, i)}</strong>
+                              <span>{c.tipo || 'Tipo sin definir'} · {h.toFixed(1)} m² hom.</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`workspace-pill${c.url ? '' : ' workspace-pill--muted'}`}>
+                              {source || 'Manual'}
+                            </span>
+                          </td>
+                          <td>
+                            {c.dias_mercado
+                              ? `${c.dias_mercado} días`
+                              : c.oportunidad_mercado
+                                ? 'Oportunidad'
+                                : 'Sin dato'}
+                          </td>
+                          <td>USD {c.precio.toLocaleString('es-AR')}</td>
+                          <td>{h.toFixed(1)} m²</td>
+                          <td><strong>USD {Math.round(pm2).toLocaleString('es-AR')}</strong></td>
+                          <td>
+                            <div className="table-actions">
+                              {c.url && (
+                                <a
+                                  href={c.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary btn-sm workspace-link-action"
+                                  title="Abrir publicación"
+                                >
+                                  Ver publicación ↗
+                                </a>
+                              )}
+                              <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(c)}>Editar</button>
+                              <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.id)}>×</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-          <form onSubmit={handleSubmit}>
-            <div className="form-grid">
-              <div className="form-group full">
-                <label>URL de publicación</label>
-                <div className="inline-control-row">
-                  <input type="url" name="url" value={form.url} tabIndex={1}
-                    onChange={(e) => { handleChange('url', e.target.value); setExtractError(null) }}
-                    placeholder="https://www.zonaprop.com.ar/, argenprop.com o mercadolibre.com.ar/..." />
-                  {form.url && (
-                    <a
-                      href={form.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-secondary btn-sm"
-                      tabIndex={-1}
-                    >
-                      Abrir
-                    </a>
-                  )}
-                  {isSupportedUrl && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={handleExtract}
-                      disabled={extracting}
-                    >
-                      {retrying ? 'Reintentando extracción...' : extracting ? 'Extrayendo...' : 'Extraer datos'}
-                    </button>
-                  )}
+          )}
+
+          {showForm ? (
+            <div className="card workflow-card">
+              <div className="section-heading">
+                <div>
+                  <span className="section-heading__eyebrow">{editId ? 'Edición' : 'Carga asistida'}</span>
+                  <h2>{editId ? 'Editar comparable' : 'Nueva comparable'}</h2>
                 </div>
-                {extractError && (
-                  <div className="alert alert-error" style={{ marginTop: 6, fontSize: 13 }}>
-                    {extractError}
+              </div>
+              <p className="workflow-note">
+                Pegá una publicación para extraer datos base automáticamente o completá la ficha manualmente si la fuente no está disponible.
+              </p>
+              <form onSubmit={handleSubmit}>
+                <div className="form-grid">
+                  <div className="form-group full">
+                    <label>URL de publicación</label>
+                    <div className="inline-control-row inline-control-row--url">
+                      <input
+                        type="url"
+                        name="url"
+                        value={form.url}
+                        tabIndex={1}
+                        onChange={(e) => { handleChange('url', e.target.value); setExtractError(null) }}
+                        placeholder="https://www.zonaprop.com.ar/, argenprop.com o mercadolibre.com.ar/..."
+                      />
+                      {form.url && (
+                        <a
+                          href={form.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="input-link-action"
+                          tabIndex={-1}
+                          aria-label="Abrir publicación"
+                          title="Abrir publicación"
+                        >
+                          ↗
+                        </a>
+                      )}
+                      {isSupportedUrl && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={handleExtract}
+                          disabled={extracting}
+                        >
+                          {retrying ? 'Reintentando...' : extracting ? 'Extrayendo...' : 'Extraer datos'}
+                        </button>
+                      )}
+                    </div>
+                    {currentSource && (
+                      <div className="workflow-inline-meta">Fuente detectada: <strong>{currentSource}</strong></div>
+                    )}
+                    {extractError && (
+                      <div className="alert alert-error" style={{ marginTop: 6, fontSize: 13 }}>
+                        {extractError}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              <div className="form-group full">
-                <label>Dirección</label>
-                <input type="text" name="direccion" value={form.direccion} tabIndex={2}
-                  onChange={(e) => handleChange('direccion', e.target.value)}
-                  placeholder="Ej: Av. Corrientes 1234" />
-              </div>
-              <div className="form-group">
-                <label>Precio publicado (USD) *</label>
-                <input type="number" name="precio" min="1" step="1" tabIndex={3}
-                  value={form.precio} onChange={(e) => handleChange('precio', e.target.value)} />
-                {errors.precio && <span className="error-msg">{errors.precio}</span>}
-              </div>
-              <div className="form-group">
-                <label>Días en el mercado</label>
-                <input type="number" name="dias_mercado" min="0" step="1" tabIndex={4}
-                  value={form.dias_mercado} onChange={(e) => handleChange('dias_mercado', e.target.value)} />
-              </div>
-              <div className="form-group full">
-                <label>Oportunidad de mercado</label>
-                <div className="checkbox-row">
-                  <label className="checkbox-row__label">
-                    <input type="checkbox" tabIndex={5} checked={form.oportunidad_mercado}
-                      onChange={(e) => handleChange('oportunidad_mercado', e.target.checked)} />
-                    Precio competitivo (aplica ×0.95)
-                  </label>
+                  <div className="form-group full">
+                    <label>Dirección</label>
+                    <input
+                      type="text"
+                      name="direccion"
+                      value={form.direccion}
+                      tabIndex={2}
+                      onChange={(e) => handleChange('direccion', e.target.value)}
+                      placeholder="Ej: Av. Corrientes 1234"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Precio publicado (USD) *</label>
+                    <input
+                      type="number"
+                      name="precio"
+                      min="1"
+                      step="1"
+                      tabIndex={3}
+                      value={form.precio}
+                      onChange={(e) => handleChange('precio', e.target.value)}
+                    />
+                    {errors.precio && <span className="error-msg">{errors.precio}</span>}
+                  </div>
+                  <div className="form-group">
+                    <label>Días en el mercado</label>
+                    <input
+                      type="number"
+                      name="dias_mercado"
+                      min="0"
+                      step="1"
+                      tabIndex={4}
+                      value={form.dias_mercado}
+                      onChange={(e) => handleChange('dias_mercado', e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group full">
+                    <label>Oportunidad de mercado</label>
+                    <div className="checkbox-row">
+                      <label className="checkbox-row__label">
+                        <input
+                          type="checkbox"
+                          tabIndex={5}
+                          checked={form.oportunidad_mercado}
+                          onChange={(e) => handleChange('oportunidad_mercado', e.target.checked)}
+                        />
+                        Precio competitivo (aplica ×0.95)
+                      </label>
+                    </div>
+                  </div>
                 </div>
+
+                <div className="workflow-section-spacer">
+                  <PropertyForm values={form} onChange={handleChange} errors={errors} />
+                </div>
+
+                <div className="btn-group">
+                  <button type="button" className="btn btn-secondary" onClick={handleCancel}>Cancelar</button>
+                  <button type="submit" className="btn btn-primary" disabled={submitting}>
+                    {submitting && <span className="spinner" />}
+                    {editId ? 'Guardar cambios' : 'Agregar comparable'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="card workflow-card workflow-inline-card">
+              <div>
+                <span className="section-heading__eyebrow">Movimiento rápido</span>
+                <h2>Seguí ampliando la muestra</h2>
+                <p className="workflow-note">Sumá otra publicación para mejorar la lectura del mercado antes de pasar a ponderadores.</p>
               </div>
-            </div>
-
-            <div className="workflow-section-spacer">
-              <PropertyForm values={form} onChange={handleChange} errors={errors} />
-            </div>
-
-            <div className="btn-group">
-              <button type="button" className="btn btn-secondary" onClick={handleCancel}>Cancelar</button>
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting && <span className="spinner" />}
-                {editId ? 'Guardar cambios' : 'Agregar comparable'}
+              <button className="btn btn-secondary" onClick={() => { setShowForm(true); setEditId(null); setForm(EMPTY_COMP) }}>
+                + Agregar otra comparable
               </button>
             </div>
-          </form>
+          )}
         </div>
-      ) : (
-        <div className="workflow-inline-action">
-          <button className="btn btn-secondary" onClick={() => { setShowForm(true); setEditId(null); setForm(EMPTY_COMP) }}>
-            + Agregar otra comparable
-          </button>
-        </div>
-      )}
+      </div>
 
-      <div className="btn-group">
+      <div className="btn-group btn-group--workspace">
         <button className="btn btn-secondary" onClick={() => navigate(`/acm/${id}/step/1`)}>← Paso 1</button>
-        <button className="btn btn-primary" disabled={comparables.length === 0}
-          onClick={() => navigate(`/acm/${id}/step/3`)}>
+        <button className="btn btn-primary" disabled={comparables.length === 0} onClick={() => navigate(`/acm/${id}/step/3`)}>
           Continuar → Paso 3
         </button>
       </div>
@@ -378,36 +475,36 @@ export default function AgregarComparables() {
       )}
 
       {extractPreview && (
-        <div style={modalStyles.overlay}>
-          <div style={modalStyles.box}>
-            <h3 style={{ marginTop: 0 }}>Datos extraídos de Zonaprop</h3>
-            <p style={{ color: '#666', marginBottom: 16 }}>Revisá los datos encontrados y confirmá para cargarlos en el formulario.</p>
-            <table style={modalStyles.table}>
+        <div className="extract-modal">
+          <div className="extract-modal__box">
+            <h3>Datos extraídos de la publicación</h3>
+            <p>Revisá los datos encontrados y confirmá para cargarlos en el formulario.</p>
+            <table className="extract-modal__table">
               <tbody>
                 {extractPreview.precio != null && (
-                  <tr><td style={modalStyles.label}>Precio</td><td><strong>USD {extractPreview.precio.toLocaleString('es-AR')}</strong></td></tr>
+                  <tr><td className="extract-modal__label">Precio</td><td><strong>USD {extractPreview.precio.toLocaleString('es-AR')}</strong></td></tr>
                 )}
                 {extractPreview.direccion && (
-                  <tr><td style={modalStyles.label}>Dirección</td><td>{extractPreview.direccion}</td></tr>
+                  <tr><td className="extract-modal__label">Dirección</td><td>{extractPreview.direccion}</td></tr>
                 )}
                 {extractPreview.superficie_cubierta != null && (
-                  <tr><td style={modalStyles.label}>Sup. cubierta</td><td>{extractPreview.superficie_cubierta} m²</td></tr>
+                  <tr><td className="extract-modal__label">Sup. cubierta</td><td>{extractPreview.superficie_cubierta} m²</td></tr>
                 )}
                 {extractPreview.tipo && (
-                  <tr><td style={modalStyles.label}>Tipo</td><td>{extractPreview.tipo}</td></tr>
+                  <tr><td className="extract-modal__label">Tipo</td><td>{extractPreview.tipo}</td></tr>
                 )}
                 {extractPreview.dias_mercado != null && (
-                  <tr><td style={modalStyles.label}>Días en mercado</td><td>{extractPreview.dias_mercado}</td></tr>
+                  <tr><td className="extract-modal__label">Días en mercado</td><td>{extractPreview.dias_mercado}</td></tr>
                 )}
                 {extractPreview.orientacion && (
-                  <tr><td style={modalStyles.label}>Orientación</td><td>{extractPreview.orientacion}</td></tr>
+                  <tr><td className="extract-modal__label">Orientación</td><td>{extractPreview.orientacion}</td></tr>
                 )}
                 {extractPreview.antiguedad != null && (
-                  <tr><td style={modalStyles.label}>Antigüedad</td><td>{extractPreview.antiguedad} años</td></tr>
+                  <tr><td className="extract-modal__label">Antigüedad</td><td>{extractPreview.antiguedad} años</td></tr>
                 )}
               </tbody>
             </table>
-            <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'flex-end' }}>
+            <div className="extract-modal__actions">
               <button className="btn btn-secondary" onClick={() => setExtractPreview(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={handleConfirmExtract}>Confirmar e insertar</button>
             </div>
@@ -416,21 +513,4 @@ export default function AgregarComparables() {
       )}
     </div>
   )
-}
-
-const modalStyles = {
-  overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-  },
-  box: {
-    background: '#fff', borderRadius: 12, padding: 32, maxWidth: 480, width: '90%',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-  },
-  table: {
-    width: '100%', borderCollapse: 'collapse',
-  },
-  label: {
-    color: '#888', paddingRight: 16, paddingBottom: 8, verticalAlign: 'top', whiteSpace: 'nowrap',
-  },
 }

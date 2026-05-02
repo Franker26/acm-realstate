@@ -131,17 +131,23 @@ function WizardProvider({ children }) {
 }
 
 const STEPS = [
-  { num: 1, label: 'Sujeto' },
-  { num: 2, label: 'Comparables' },
-  { num: 3, label: 'Ponderadores' },
-  { num: 4, label: 'Resultados' },
-  { num: 5, label: 'Exportar PDF' },
+  { num: 1, label: 'Sujeto', description: 'Ficha base del inmueble' },
+  { num: 2, label: 'Comparables', description: 'Base de mercado activa' },
+  { num: 3, label: 'Ponderadores', description: 'Ajustes y calibración' },
+  { num: 4, label: 'Resultados', description: 'Valor estimado y rango' },
+  { num: 5, label: 'Exportar PDF', description: 'Cierre y entrega' },
 ]
 
 function WizardNavInner({ currentStep }) {
   const { state } = useWizard()
+  const { user } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
   const acmId = state.acmId
+  const progress = Math.round((currentStep / STEPS.length) * 100)
+  const appName = getSavedAppName()
+  const logo = getSavedLogo()
+  const currentPath = location.pathname
 
   function goToStep(num) {
     if (!acmId) return
@@ -150,24 +156,72 @@ function WizardNavInner({ currentStep }) {
   }
 
   return (
-    <nav className="wizard-nav">
-      {STEPS.map((s) => {
-        const isDone = currentStep > s.num
-        const isActive = currentStep === s.num
-        const isClickable = acmId && s.num !== currentStep && s.num <= currentStep + 1
-        return (
-          <div
-            key={s.num}
-            className={`wizard-step${isActive ? ' active' : ''}${isDone ? ' done' : ''}${isClickable ? ' clickable' : ''}`}
-            onClick={() => isClickable && goToStep(s.num)}
-            title={isClickable ? `Ir al paso ${s.num}` : undefined}
-          >
-            <span className="step-num">{isDone ? '✓' : s.num}</span>
-            <span className="step-label">{s.label}</span>
+    <section className="wizard-shell" aria-label="Pipeline de confección">
+      <div className="wizard-shell__header">
+        <div className="wizard-shell__header-main">
+          <button type="button" className="wizard-shell__back" onClick={() => navigate('/')}>
+            ← Dashboard
+          </button>
+          <div className="wizard-shell__brand">
+            <span className="wizard-shell__brand-mark">
+              {logo ? (
+                <img src={logo} alt={`${appName} logo`} className="wizard-shell__brand-logo" />
+              ) : (
+                <span>{appName.slice(0, 1).toUpperCase()}</span>
+              )}
+            </span>
+            <div>
+              <span className="wizard-shell__eyebrow">Pipeline</span>
+              <strong>Confección de tasación</strong>
+            </div>
           </div>
-        )
-      })}
-    </nav>
+        </div>
+        <div className="wizard-shell__header-side">
+          <div className="wizard-shell__progress" aria-label={`Progreso ${progress}%`}>
+            <span>{currentStep} de {STEPS.length}</span>
+            <div className="wizard-shell__progress-track" aria-hidden="true">
+              <div className="wizard-shell__progress-fill" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+          {user && (
+            <div className="wizard-shell__user">
+              <div className="wizard-shell__user-avatar">
+                {user.username.slice(0, 1).toUpperCase()}
+              </div>
+              <div className="wizard-shell__user-copy">
+                <strong>{user.username}</strong>
+                <span>{currentPath.includes('/step/') ? `Paso ${currentStep}` : 'Workspace'}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <nav className="wizard-nav">
+        {STEPS.map((s) => {
+          const isDone = currentStep > s.num
+          const isActive = currentStep === s.num
+          const isClickable = acmId && s.num !== currentStep && s.num <= currentStep + 1
+          const statusLabel = isDone ? 'Completo' : isActive ? 'Actual' : `Paso ${s.num}`
+
+          return (
+            <div
+              key={s.num}
+              className={`wizard-step${isActive ? ' active' : ''}${isDone ? ' done' : ''}${isClickable ? ' clickable' : ''}`}
+              onClick={() => isClickable && goToStep(s.num)}
+              title={isClickable ? `Ir al paso ${s.num}` : undefined}
+            >
+              <span className="step-num">{isDone ? '✓' : s.num}</span>
+              <span className="wizard-step__copy">
+                <span className="step-label">{s.label}</span>
+                <span className="step-meta">{s.description}</span>
+              </span>
+              <span className="wizard-step__status">{statusLabel}</span>
+            </div>
+          )
+        })}
+      </nav>
+    </section>
   )
 }
 
@@ -215,6 +269,7 @@ function AppHeader() {
   const isHomeRoute = location.pathname === '/'
   const isApprovalsRoute = location.pathname === '/approvals'
   const isSettingsRoute = location.pathname === '/settings'
+  const isWorkflowRoute = location.pathname.startsWith('/acm/')
 
   const navItems = [
     { to: '/', label: 'Tablero', visible: true },
@@ -223,7 +278,7 @@ function AppHeader() {
   ].filter((item) => item.visible)
 
   return (
-    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
+    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute || isWorkflowRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
       <div className="app-header__shell">
         <div className="app-header__left">
           <Link to="/" className="app-title">
