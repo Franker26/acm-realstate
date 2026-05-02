@@ -4,6 +4,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { getACM } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
+import InlineNotice from '../components/InlineNotice.jsx'
 
 function fmt(n) {
   return n != null ? `USD ${Math.round(n).toLocaleString('es-AR')}` : '—'
@@ -218,17 +219,24 @@ export default function ExportarPDF() {
       </div>
 
       {!resultado && (
-        <div className="alert alert-error">
-          No hay resultados calculados. Volvé al paso 4.
-        </div>
+        <InlineNotice
+          tone="warning"
+          title="Todavía no hay resultados listos para exportar"
+          description="Volvé al paso 4 para calcular el valor antes de generar el informe."
+          className="notice--spaced"
+        />
       )}
 
       {resultado && (
         <div className="card">
           <h2>Resumen de resultados</h2>
           {blockedByApproval && (
-            <div className="alert alert-error">
-              Esta tasación requiere aprobación antes de exportar.
+            <InlineNotice
+              tone="warning"
+              title="Esta tasación necesita aprobación antes de exportarse"
+              description="Cuando quede aprobada, vas a poder generar el PDF desde esta misma pantalla."
+              className="notice--spaced"
+            >
               {acm?.approval_comments?.length > 0 && (
                 <div className="pdf-approval-comments">
                   {acm.approval_comments.map((comment) => (
@@ -238,7 +246,7 @@ export default function ExportarPDF() {
                   ))}
                 </div>
               )}
-            </div>
+            </InlineNotice>
           )}
           <div className="pdf-summary-grid">
             <div className="pdf-summary-card">
@@ -262,7 +270,7 @@ export default function ExportarPDF() {
             los KPIs de la tasación y el gráfico de precios ajustados.
           </p>
 
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && <InlineNotice tone="error" title="No pudimos generar el PDF" description={error} className="notice--spaced" />}
           {success && <div className="alert alert-success">PDF descargado correctamente.</div>}
 
           <button className="btn btn-primary" onClick={handleDownload} disabled={generating || blockedByApproval}>

@@ -5,6 +5,7 @@ import {
   adminUpdateIntegrationSettings,
 } from '../../adminApi.js'
 import { LoadingState } from '../../components/StatusState.jsx'
+import InlineNotice from '../../components/InlineNotice.jsx'
 
 const SOURCE_LABELS = {
   zonaprop: 'Zonaprop',
@@ -177,8 +178,8 @@ export default function AdminSettings() {
               />
             </div>
 
-            {error && <p className="admin-error">{error}</p>}
-            {success && <p className="admin-success">{success}</p>}
+            {error && <InlineNotice tone="error" title="No pudimos guardar la configuración" description={error} className="notice--spaced" compact />}
+            {success && <InlineNotice tone="success" title="Configuración actualizada" description={success} className="notice--spaced" compact />}
 
             <div className="admin-form__actions">
               <button type="submit" className="admin-btn" disabled={saving}>

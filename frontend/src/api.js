@@ -1,3 +1,5 @@
+import { getFriendlyErrorMessage } from './utils/feedback.js'
+
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 function getToken() {
@@ -18,7 +20,7 @@ async function request(method, path, body, options = {}) {
     if (redirectOn401 && window.location.pathname !== '/login') {
       window.location.assign('/login')
     }
-    throw new Error('Sesión expirada')
+    throw new Error(getFriendlyErrorMessage('Sesión expirada'))
   }
   if (!res.ok) {
     let detail = `HTTP ${res.status}`
@@ -26,7 +28,7 @@ async function request(method, path, body, options = {}) {
       const err = await res.json()
       detail = err.detail || detail
     } catch {}
-    throw new Error(detail)
+    throw new Error(getFriendlyErrorMessage(detail))
   }
   if (res.status === 204) return null
   return res.json()
@@ -41,7 +43,7 @@ export async function loginUser(username, password) {
   if (!res.ok) {
     let detail = 'Error de autenticación'
     try { detail = (await res.json()).detail || detail } catch {}
-    throw new Error(detail)
+    throw new Error(getFriendlyErrorMessage(detail, 'No pudimos validar tus datos. Revisá usuario y contraseña e intentá nuevamente.'))
   }
   return res.json()
 }
@@ -84,6 +86,7 @@ export const getBrandingSettings = () =>
 export const updateBrandingSettings = (data) => request('PUT', '/api/settings/branding', data)
 export const getIntegrationStatus = () => request('GET', '/api/settings/integrations/status')
 export const getSystemParams = () => request('GET', '/api/settings/params')
+export const exchangeMlCode = (code) => request('POST', '/api/integrations/mercadolibre/callback', { code })
 
 export const listModifiers = () => request('GET', '/api/modifiers')
 export const createModifier = (data) => request('POST', '/api/modifiers', data)

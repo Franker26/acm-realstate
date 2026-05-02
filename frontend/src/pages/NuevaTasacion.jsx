@@ -6,6 +6,7 @@ import AddressAutocomplete from '../components/AddressAutocomplete.jsx'
 import MapModal from '../components/MapModal.jsx'
 import PropertyForm from '../components/PropertyForm.jsx'
 import { LoadingState, StateCard } from '../components/StatusState.jsx'
+import { getFriendlyFieldError } from '../utils/feedback.js'
 
 const EMPTY = {
   nombre: '',
@@ -47,11 +48,11 @@ function fromACM(acm) {
 
 function validate(v) {
   const err = {}
-  if (!v.nombre.trim()) err.nombre = 'Requerido'
-  if (!v.direccion.trim()) err.direccion = 'Requerido'
-  if (!v.tipo) err.tipo = 'Requerido'
+  if (!v.nombre.trim()) err.nombre = getFriendlyFieldError('Requerido')
+  if (!v.direccion.trim()) err.direccion = getFriendlyFieldError('Requerido')
+  if (!v.tipo) err.tipo = getFriendlyFieldError('Requerido')
   if (!v.superficie_cubierta || Number(v.superficie_cubierta) <= 0)
-    err.superficie_cubierta = 'Debe ser mayor a 0'
+    err.superficie_cubierta = getFriendlyFieldError('Debe ser mayor a 0')
   return err
 }
 

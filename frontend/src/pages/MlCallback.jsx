@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { exchangeMlCode } from '../api.js'
 import { LoadingState, StateCard } from '../components/StatusState.jsx'
+import { getFriendlyOauthError } from '../utils/feedback.js'
 
 export default function MlCallback() {
   const navigate = useNavigate()
@@ -15,13 +16,13 @@ export default function MlCallback() {
 
     if (error) {
       setStatus('error')
-      setMessage(`MercadoLibre rechazó la autorización: ${error}`)
+      setMessage(getFriendlyOauthError('MercadoLibre', error))
       return
     }
 
     if (!code) {
       setStatus('error')
-      setMessage('No se recibió código de autorización.')
+      setMessage('No recibimos la autorización necesaria para vincular la cuenta. Probá nuevamente desde Configuración.')
       return
     }
 

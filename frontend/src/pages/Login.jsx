@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../App.jsx'
+import InlineNotice from '../components/InlineNotice.jsx'
 import { getBrandingSettings } from '../api.js'
 import { applyTheme, getSavedAppName, getSavedLogo, syncBranding } from '../theme.js'
 
@@ -231,7 +232,13 @@ export default function Login() {
               />
             </div>
             {error && (
-              <div className="alert alert-error login-alert">{error}</div>
+              <InlineNotice
+                tone="error"
+                title="No pudimos iniciar sesión"
+                description={error}
+                className="login-alert"
+                compact
+              />
             )}
 
             <button
