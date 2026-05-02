@@ -92,39 +92,83 @@ function factorToSlider(f) {
   return Math.round(Math.max(MIN_SLIDER, Math.min(MAX_SLIDER, f * 100)))
 }
 
+function clampFactor(value) {
+  return Math.max(MIN_SLIDER / 100, Math.min(MAX_SLIDER / 100, value))
+}
+
+function factorDelta(value) {
+  return value - 1
+}
+
+function normalizeInputMode(mode) {
+  if (mode === 'arrows' || mode === 'numeric') return 'stepper'
+  return mode === 'stepper' ? 'stepper' : 'slider'
+}
+
+function factorTone(value) {
+  const delta = factorDelta(value)
+  const strength = Math.min(1, Math.abs(delta) / 0.3)
+  if (delta === 0) {
+    return {
+      className: 'neutral',
+      color: '#98a2b3',
+      fill: '#d0d5dd',
+      glow: 'rgba(208, 213, 221, 0.45)',
+    }
+  }
+
+  if (delta > 0) {
+    const light = 82 - strength * 26
+    const fill = `hsl(144 62% ${light}%)`
+    return {
+      className: 'positive',
+      color: `hsl(145 66% ${34 - strength * 8}%)`,
+      fill,
+      glow: `hsla(145 70% 42% / ${0.18 + strength * 0.24})`,
+    }
+  }
+
+  const light = 84 - strength * 28
+  const fill = `hsl(4 84% ${light}%)`
+  return {
+    className: 'negative',
+    color: `hsl(4 74% ${42 - strength * 8}%)`,
+    fill,
+    glow: `hsla(4 84% 54% / ${0.18 + strength * 0.24})`,
+  }
+}
+
 function getTrackStyle(sliderVal) {
   const range = MAX_SLIDER - MIN_SLIDER
   const centerPct = ((CENTER - MIN_SLIDER) / range) * 100
   const fillPct   = ((sliderVal - MIN_SLIDER) / range) * 100
-  const t = Math.abs(sliderVal - CENTER) / (range / 2)
+  const tone = factorTone(sliderToFactor(sliderVal))
 
-  if (sliderVal === CENTER) return { background: '#e0e0e0' }
+  if (sliderVal === CENTER) return { background: '#e5e7eb' }
 
   if (sliderVal < CENTER) {
-    const h = 210, s = Math.round(50 + t * 40), l = Math.round(55 - t * 15)
-    const color = `hsl(${h},${s}%,${l}%)`
     return {
       background: `linear-gradient(to right,
-        #f0f0f0 0%, #f0f0f0 ${fillPct}%,
-        ${color} ${fillPct}%, ${color} ${centerPct}%,
-        #e0e0e0 ${centerPct}%, #e0e0e0 100%)`,
+        #eef2f6 0%, #eef2f6 ${fillPct}%,
+        ${tone.fill} ${fillPct}%, ${tone.fill} ${centerPct}%,
+        #dfe5ec ${centerPct}%, #dfe5ec 100%)`,
+      boxShadow: `inset 0 0 0 1px ${tone.glow}`,
     }
   }
-  const h = 25, s = Math.round(60 + t * 40), l = Math.round(58 - t * 18)
-  const color = `hsl(${h},${s}%,${l}%)`
+
   return {
     background: `linear-gradient(to right,
-      #e0e0e0 0%, #e0e0e0 ${centerPct}%,
-      ${color} ${centerPct}%, ${color} ${fillPct}%,
-      #f0f0f0 ${fillPct}%, #f0f0f0 100%)`,
+      #dfe5ec 0%, #dfe5ec ${centerPct}%,
+      ${tone.fill} ${centerPct}%, ${tone.fill} ${fillPct}%,
+      #eef2f6 ${fillPct}%, #eef2f6 100%)`,
+    boxShadow: `inset 0 0 0 1px ${tone.glow}`,
   }
 }
 
-function pctLabel(sliderVal) {
-  const d = sliderVal - CENTER
-  if (d === 0) return <span style={{ color: '#999', fontWeight: 500 }}>0%</span>
-  const color = d > 0 ? '#e65100' : '#1565c0'
-  return <span style={{ color, fontWeight: 700 }}>{d > 0 ? '+' : ''}{d}%</span>
+function pctLabel(value) {
+  const pct = Math.round((value - 1) * 100)
+  if (pct === 0) return '0%'
+  return `${pct > 0 ? '+' : ''}${pct}%`
 }
 
 function getContext(factorKey, comp, acm) {
@@ -175,14 +219,15 @@ function FactorSlider({ factorKey, label, tooltip, value, recommendation, contex
   const recPct = recommendation != null
     ? ((factorToSlider(recommendation) - MIN_SLIDER) / range) * 100
     : null
+  const tone = factorTone(value)
 
   function stepValue(delta) {
-    const next = Math.max(MIN_SLIDER / 100, Math.min(MAX_SLIDER / 100, parseFloat((value + delta).toFixed(3))))
+    const next = clampFactor(parseFloat((value + delta).toFixed(3)))
     onChange(factorKey, next)
   }
 
   return (
-    <div className="factor-row">
+    <div className={`factor-row factor-row--${tone.className}`}>
       <span className="factor-row-label">
         {label}
         {tooltip && (
@@ -219,44 +264,31 @@ function FactorSlider({ factorKey, label, tooltip, value, recommendation, contex
           </>
         )}
 
-        {inputMode === 'arrows' && (
-          <div className="factor-arrows">
-            <button type="button" className="factor-arrow-btn" onClick={() => stepValue(-0.01)}>↓</button>
+        {inputMode === 'stepper' && (
+          <div className="factor-stepper">
+            <button type="button" className="factor-step-btn factor-step-btn--neg-strong" onClick={() => stepValue(-0.10)}>-10</button>
+            <button type="button" className="factor-step-btn factor-step-btn--neg-soft" onClick={() => stepValue(-0.01)}>-1</button>
             <input
               type="number"
-              className="factor-arrow-input"
-              step="0.01"
+              className="factor-step-input"
+              step="0.001"
               min={MIN_SLIDER / 100}
               max={MAX_SLIDER / 100}
               value={value.toFixed(3)}
               onChange={(e) => {
                 const v = parseFloat(e.target.value)
-                if (!isNaN(v)) onChange(factorKey, Math.max(MIN_SLIDER / 100, Math.min(MAX_SLIDER / 100, v)))
+                if (!isNaN(v)) onChange(factorKey, clampFactor(v))
               }}
             />
-            <button type="button" className="factor-arrow-btn" onClick={() => stepValue(+0.01)}>↑</button>
+            <button type="button" className="factor-step-btn factor-step-btn--pos-soft" onClick={() => stepValue(+0.01)}>+1</button>
+            <button type="button" className="factor-step-btn factor-step-btn--pos-strong" onClick={() => stepValue(+0.10)}>+10</button>
           </div>
-        )}
-
-        {inputMode === 'numeric' && (
-          <input
-            type="number"
-            className="factor-numeric-input"
-            step="0.001"
-            min={MIN_SLIDER / 100}
-            max={MAX_SLIDER / 100}
-            value={value.toFixed(3)}
-            onChange={(e) => {
-              const v = parseFloat(e.target.value)
-              if (!isNaN(v)) onChange(factorKey, Math.max(MIN_SLIDER / 100, Math.min(MAX_SLIDER / 100, v)))
-            }}
-          />
         )}
 
         {context && <div className="factor-context">{context}</div>}
       </div>
-      <span className={`factor-row-pct${value > 1 ? ' factor-val--positive' : value < 1 ? ' factor-val--negative' : ''}`}>{pctLabel(sliderVal)}</span>
-      <span className={`factor-row-val${value > 1 ? ' factor-val--positive' : value < 1 ? ' factor-val--negative' : ''}`}>{value.toFixed(3)}</span>
+      <span className={`factor-row-pct factor-row-pct--${tone.className}`}>{pctLabel(value)}</span>
+      <span className={`factor-row-val factor-row-val--${tone.className}`}>{value.toFixed(3)}</span>
     </div>
   )
 }
@@ -328,7 +360,7 @@ export default function AplicarPonderadores() {
   const [recommendMap, setRecommendMap] = useState({})
   const [advancedMode, setAdvancedMode] = useState(false)
   const [inputMode, setInputMode] = useState(
-    () => localStorage.getItem('acm_factor_input_mode') || 'slider'
+    () => normalizeInputMode(localStorage.getItem('acm_factor_input_mode'))
   )
 
   function handleInputModeChange(mode) {
@@ -426,10 +458,10 @@ export default function AplicarPonderadores() {
         <span className="page-eyebrow">Paso 3</span>
         <h1>Ponderadores de ajuste</h1>
         <p>
-          Cada barra ajusta el precio de la comparable para equipararla a la sujeto.
-          Centro = sin ajuste. <span className="ponderadores-accent ponderadores-accent--warm">Naranja</span> = comparable vale
-          menos (se sube su precio). <span className="ponderadores-accent ponderadores-accent--cool">Azul</span> = vale más (se baja).
-          La <span className="ponderadores-accent">aguja azul</span> indica el valor recomendado por el sistema.
+          Ajustá cada comparable contra el sujeto con una lectura más simple:
+          <span className="ponderadores-accent ponderadores-accent--danger"> rojo</span> cuando el factor cae por debajo de 1.000,
+          <span className="ponderadores-accent ponderadores-accent--success"> verde</span> cuando supera 1.000
+          y mayor intensidad cuanto más fuerte sea el ajuste. La marca del sistema sigue mostrando el valor recomendado.
         </p>
       </div>
 
@@ -441,8 +473,7 @@ export default function AplicarPonderadores() {
           <div className="factor-mode-switcher">
             {[
               { key: 'slider', title: 'Sliders', icon: '⟺' },
-              { key: 'arrows', title: 'Flechas + número', icon: '↕' },
-              { key: 'numeric', title: 'Número libre', icon: '#' },
+              { key: 'stepper', title: 'Ajuste fino', icon: '±' },
             ].map(({ key, title, icon }) => (
               <button
                 key={key}
@@ -489,7 +520,7 @@ export default function AplicarPonderadores() {
 
       {advancedMode && (
         <div className="alert alert-info alert-info--compact">
-          Factores adicionales habilitados: cochera, pileta, luminosidad, vistas y amenities.
+          Factores adicionales habilitados para comparables especiales: cochera, pileta, luminosidad, vistas y amenities.
         </div>
       )}
 

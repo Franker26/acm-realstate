@@ -308,14 +308,22 @@ export default function AgregarComparables() {
                                   href={c.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="btn btn-secondary btn-sm workspace-link-action"
+                                  className="workspace-link-action"
                                   title="Abrir publicación"
                                 >
-                                  Ver publicación ↗
+                                  <span>Publicación</span>
+                                  <span aria-hidden="true">↗</span>
                                 </a>
                               )}
-                              <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(c)}>Editar</button>
-                              <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.id)}>×</button>
+                              <button className="btn btn-secondary btn-sm table-actions__edit" onClick={() => handleEdit(c)}>Editar</button>
+                              <button
+                                className="table-actions__delete"
+                                onClick={() => handleDelete(c.id)}
+                                aria-label="Eliminar comparable"
+                                title="Eliminar comparable"
+                              >
+                                <span aria-hidden="true">×</span>
+                              </button>
                             </div>
                           </td>
                         </tr>
