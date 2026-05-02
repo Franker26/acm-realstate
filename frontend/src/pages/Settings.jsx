@@ -16,6 +16,7 @@ import {
   updateModifier,
   updateUser,
 } from '../api.js'
+import { LoadingState } from '../components/StatusState.jsx'
 import { applyTheme, getCachedBrandingPayload, syncBranding } from '../theme.js'
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -829,7 +830,13 @@ function ModifiersPanel() {
       )}
 
       {loading ? (
-        <span className="spinner" />
+        <LoadingState
+          eyebrow="Configuración"
+          title="Estamos cargando los modificadores"
+          subtitle="Recuperamos las opciones personalizadas para que puedas editarlas con contexto."
+          messages={['Cargando opciones...', 'Ordenando modificadores...', 'Preparando edición...']}
+          mode="inline"
+        />
       ) : modifiers.length === 0 ? (
         <p style={{ color: 'var(--text-muted)' }}>No hay opciones configuradas aún. Creá la primera con el botón de arriba.</p>
       ) : (

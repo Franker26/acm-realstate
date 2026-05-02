@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { adminCreateCompany, adminDeleteCompany, adminListCompanies } from '../../adminApi.js'
+import { LoadingState } from '../../components/StatusState.jsx'
 
 export default function AdminDashboard() {
   const [companies, setCompanies] = useState([])
@@ -86,7 +87,13 @@ export default function AdminDashboard() {
       )}
 
       {loading ? (
-        <p className="admin-muted">Cargando...</p>
+        <LoadingState
+          eyebrow="Admin"
+          title="Estamos cargando las empresas"
+          subtitle="Preparamos el panel con compañías, accesos y actividad general."
+          messages={['Cargando empresas...', 'Ordenando accesos...', 'Preparando panel...']}
+          mode="inline"
+        />
       ) : companies.length === 0 ? (
         <p className="admin-muted">No hay empresas registradas.</p>
       ) : (

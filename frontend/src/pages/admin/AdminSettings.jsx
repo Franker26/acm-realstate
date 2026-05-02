@@ -4,6 +4,7 @@ import {
   adminGetIntegrationSettings,
   adminUpdateIntegrationSettings,
 } from '../../adminApi.js'
+import { LoadingState } from '../../components/StatusState.jsx'
 
 const SOURCE_LABELS = {
   zonaprop: 'Zonaprop',
@@ -122,7 +123,13 @@ export default function AdminSettings() {
         </p>
 
         {loading ? (
-          <p>Cargando…</p>
+          <LoadingState
+            eyebrow="Admin"
+            title="Estamos cargando la configuración"
+            subtitle="Recuperamos el estado del scraper principal y del backup para que puedas revisar la integración."
+            messages={['Cargando configuración...', 'Leyendo credenciales...', 'Validando estado del servicio...']}
+            mode="inline"
+          />
         ) : (
           <form onSubmit={handleSave} className="admin-form">
 
