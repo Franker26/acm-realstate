@@ -23,14 +23,20 @@ import AdminCompanyDetail from './pages/admin/AdminCompanyDetail.jsx'
 import AdminSettings from './pages/admin/AdminSettings.jsx'
 import NotFound from './pages/NotFound.jsx'
 import FloatingCalculator from './components/FloatingCalculator.jsx'
+import ConfirmDialog from './components/ConfirmDialog.jsx'
 import { getBrandingSettings, getCurrentUser, loginUser } from './api.js'
 
 // --- Auth ---
 
 const AuthContext = createContext(null)
+const ConfirmContext = createContext(async () => false)
 
 export function useAuth() {
   return useContext(AuthContext)
+}
+
+export function useConfirm() {
+  return useContext(ConfirmContext)
 }
 
 function AuthProvider({ children }) {
@@ -138,6 +144,45 @@ function WizardProvider({ children }) {
     <WizardContext.Provider value={{ state, dispatch, chartRef }}>
       {children}
     </WizardContext.Provider>
+  )
+}
+
+function ConfirmProvider({ children }) {
+  const [dialog, setDialog] = useState(null)
+
+  function confirm(options) {
+    return new Promise((resolve) => {
+      setDialog({ ...options, resolve })
+    })
+  }
+
+  function handleCancel() {
+    if (!dialog) return
+    dialog.resolve(false)
+    setDialog(null)
+  }
+
+  function handleConfirm() {
+    if (!dialog) return
+    dialog.resolve(true)
+    setDialog(null)
+  }
+
+  return (
+    <ConfirmContext.Provider value={confirm}>
+      {children}
+      <ConfirmDialog
+        open={Boolean(dialog)}
+        tone={dialog?.tone}
+        eyebrow={dialog?.eyebrow}
+        title={dialog?.title}
+        description={dialog?.description}
+        confirmLabel={dialog?.confirmLabel}
+        cancelLabel={dialog?.cancelLabel}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
+    </ConfirmContext.Provider>
   )
 }
 
@@ -415,13 +460,15 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <WizardProvider>
-          <AppHeader />
-          <main className="app-main">
-            <AppRoutes />
-          </main>
-          <FloatingCalculator />
-        </WizardProvider>
+        <ConfirmProvider>
+          <WizardProvider>
+            <AppHeader />
+            <main className="app-main">
+              <AppRoutes />
+            </main>
+            <FloatingCalculator />
+          </WizardProvider>
+        </ConfirmProvider>
       </AuthProvider>
     </BrowserRouter>
   )

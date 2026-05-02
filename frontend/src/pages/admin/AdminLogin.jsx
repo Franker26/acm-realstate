@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { adminLogin } from '../../adminApi.js'
+import InlineNotice from '../../components/InlineNotice.jsx'
 
 export default function AdminLogin() {
   const [username, setUsername] = useState('')
@@ -31,7 +32,7 @@ export default function AdminLogin() {
         <h1 className="admin-login-title">ACM Admin</h1>
         <p className="admin-login-sub">Panel de administración de plataforma</p>
         <form onSubmit={handleSubmit} className="admin-login-form">
-          {error && <div className="admin-alert admin-alert--error">{error}</div>}
+          {error && <InlineNotice tone="error" title="No pudimos iniciar sesión" description={error} className="notice--spaced" compact />}
           <label className="admin-label">Usuario</label>
           <input
             type="text"

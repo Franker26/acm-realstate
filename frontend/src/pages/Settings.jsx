@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../App.jsx'
+import { useAuth, useConfirm } from '../App.jsx'
+import InlineNotice from '../components/InlineNotice.jsx'
 import {
   changePassword,
   createModifier,
@@ -64,6 +65,7 @@ function UsersPanel({ currentUser, onCurrentUserUpdated, isMobile = false }) {
   const [savingPwd, setSavingPwd] = useState({})
   const [savingRoleId, setSavingRoleId] = useState(null)
   const [selectedUserId, setSelectedUserId] = useState(null)
+  const confirm = useConfirm()
 
   useEffect(() => {
     listUsers()
@@ -93,7 +95,16 @@ function UsersPanel({ currentUser, onCurrentUserUpdated, isMobile = false }) {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('¿Eliminar este usuario?')) return
+    const accepted = await confirm({
+      tone: 'danger',
+      eyebrow: 'Eliminar usuario',
+      title: 'Se va a quitar este usuario del workspace',
+      description: 'El acceso quedará inhabilitado para esta persona. Si querés conservar el usuario, podés ajustar sus permisos en lugar de eliminarlo.',
+      confirmLabel: 'Eliminar usuario',
+      cancelLabel: 'Mantener usuario',
+    })
+    if (!accepted) return
+
     setError(null)
     try {
       await deleteUser(id)
@@ -146,7 +157,7 @@ function UsersPanel({ currentUser, onCurrentUserUpdated, isMobile = false }) {
     return (
       <div>
         <SectionTitle>Equipo</SectionTitle>
-        {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+        {error && <InlineNotice tone="error" title="No pudimos actualizar el equipo" description={error} className="notice--spaced" />}
 
         <div className="settings-group settings-group--mobile-users">
           <div className="settings-group-header">
@@ -285,7 +296,7 @@ function UsersPanel({ currentUser, onCurrentUserUpdated, isMobile = false }) {
   return (
     <div>
       <SectionTitle>Equipo</SectionTitle>
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {error && <InlineNotice tone="error" title="No pudimos actualizar el equipo" description={error} className="notice--spaced" />}
 
       <div className="settings-group">
         <div className="settings-group-header">
@@ -462,7 +473,7 @@ function ThemePanel() {
   return (
     <div>
       <SectionTitle>Personalización</SectionTitle>
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {error && <InlineNotice tone="error" title="No pudimos guardar la marca" description={error} className="notice--spaced" />}
       {message && <div className="alert alert-success" style={{ marginBottom: 16 }}>{message}</div>}
 
       <div className="settings-group">
@@ -588,7 +599,7 @@ function IntegrationStatusPanel() {
       <p style={{ margin: '0 0 20px', color: 'var(--text-muted)', fontSize: 13 }}>
         La configuración de integraciones es administrada por el equipo de soporte.
       </p>
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {error && <InlineNotice tone="error" title="No pudimos revisar las integraciones" description={error} className="notice--spaced" />}
 
       {!data ? (
         <span className="spinner" />
@@ -629,7 +640,7 @@ function SystemParamsPanel() {
       <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: 13 }}>
         Todos los valores almacenados en la tabla <code>app_settings</code>. Los valores sensibles aparecen enmascarados.
       </p>
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {error && <InlineNotice tone="error" title="No pudimos cargar los parámetros" description={error} className="notice--spaced" />}
 
       {!params ? (
         <span className="spinner" />
@@ -689,6 +700,7 @@ function ModifiersPanel() {
   const [form, setForm] = useState(EMPTY_MODIFIER)
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
+  const confirm = useConfirm()
 
   useEffect(() => {
     listModifiers()
@@ -736,7 +748,16 @@ function ModifiersPanel() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('¿Eliminar esta opción?')) return
+    const accepted = await confirm({
+      tone: 'danger',
+      eyebrow: 'Eliminar opción',
+      title: 'Esta opción personalizada se va a eliminar',
+      description: 'La configuración dejará de estar disponible para nuevas tasaciones y ajustes.',
+      confirmLabel: 'Eliminar opción',
+      cancelLabel: 'Mantener opción',
+    })
+    if (!accepted) return
+
     try {
       await deleteModifier(id)
       setModifiers((prev) => prev.filter((m) => m.id !== id))
@@ -767,7 +788,7 @@ function ModifiersPanel() {
       <p style={{ margin: '0 0 16px', color: 'var(--text-muted)', fontSize: 13 }}>
         Configurá las opciones de calificación y sus factores de ajuste para cada campo. El valor <strong>1.00</strong> es la referencia neutral (0%).
       </p>
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {error && <InlineNotice tone="error" title="No pudimos actualizar las opciones" description={error} className="notice--spaced" />}
 
       <div className="settings-group-header" style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Opciones configuradas</span>

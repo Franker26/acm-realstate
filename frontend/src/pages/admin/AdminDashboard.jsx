@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { adminCreateCompany, adminDeleteCompany, adminListCompanies } from '../../adminApi.js'
+import { useConfirm } from '../../App.jsx'
+import InlineNotice from '../../components/InlineNotice.jsx'
 
 export default function AdminDashboard() {
   const [companies, setCompanies] = useState([])
@@ -9,6 +11,7 @@ export default function AdminDashboard() {
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const confirm = useConfirm()
 
   useEffect(() => {
     load()
@@ -44,7 +47,16 @@ export default function AdminDashboard() {
   }
 
   async function handleDelete(id, name) {
-    if (!window.confirm(`¿Eliminar la empresa "${name}"? Esta acción no se puede deshacer.`)) return
+    const accepted = await confirm({
+      tone: 'danger',
+      eyebrow: 'Eliminar empresa',
+      title: `Se va a eliminar "${name}"`,
+      description: 'Esta acción quitará la empresa de la plataforma. Si todavía tiene actividad, conviene revisarla antes de continuar.',
+      confirmLabel: 'Eliminar empresa',
+      cancelLabel: 'Mantener empresa',
+    })
+    if (!accepted) return
+
     setError(null)
     try {
       await adminDeleteCompany(id)
@@ -63,7 +75,7 @@ export default function AdminDashboard() {
         </button>
       </div>
 
-      {error && <div className="admin-alert admin-alert--error">{error}</div>}
+      {error && <InlineNotice tone="error" title="No pudimos actualizar las empresas" description={error} className="notice--spaced" />}
 
       {showForm && (
         <form onSubmit={handleCreate} className="admin-inline-form">

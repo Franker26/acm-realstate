@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, updateACM } from '../api.js'
-import { useAuth, useWizard } from '../App.jsx'
+import { useAuth, useConfirm, useWizard } from '../App.jsx'
 import { LoadingState, MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
 import { getSavedAppName, getSavedLogo } from '../theme.js'
 
@@ -109,6 +109,7 @@ export default function Home() {
   const [appName, setAppName] = useState(() => getSavedAppName())
   const { dispatch } = useWizard()
   const { user, logout } = useAuth()
+  const confirm = useConfirm()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -310,12 +311,21 @@ export default function Home() {
   }
 
   async function handleDelete(id, nombre) {
-    if (!window.confirm(`¿Eliminar el ACM "${nombre}"?`)) return
+    const accepted = await confirm({
+      tone: 'danger',
+      eyebrow: 'Eliminar tasación',
+      title: `Se va a eliminar "${nombre}"`,
+      description: 'Esta acción quitará la tasación del tablero. Si querés conservar el historial, podés moverla a Cancelado en lugar de eliminarla.',
+      confirmLabel: 'Eliminar tasación',
+      cancelLabel: 'Mantener tasación',
+    })
+    if (!accepted) return
+
     try {
       await deleteACM(id)
       setAcms((prev) => prev.filter((a) => a.id !== id))
     } catch (e) {
-      window.alert('Error al eliminar: ' + e.message)
+      setError(e.message)
     }
   }
 
@@ -336,7 +346,7 @@ export default function Home() {
     } catch (e) {
       // Revert on failure
       setAcms((prev) => prev.map((item) => (item.id === acm.id ? { ...item, stage: acm.stage } : item)))
-      window.alert('No se pudo cambiar la etapa: ' + e.message)
+      setError(e.message)
     } finally {
       setUpdatingId(null)
     }

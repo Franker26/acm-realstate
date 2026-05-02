@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { addComparable, deleteComparable, extractProperty, getACM, updateComparable } from '../api.js'
-import { useWizard, WizardNav } from '../App.jsx'
+import { useConfirm, useWizard, WizardNav } from '../App.jsx'
+import InlineNotice from '../components/InlineNotice.jsx'
 import PropertyForm from '../components/PropertyForm.jsx'
 import SmartLoader from '../components/SmartLoader.jsx'
+import { getFriendlyFieldError } from '../utils/feedback.js'
 
 const EMPTY_COMP = {
   url: '',
@@ -84,6 +86,7 @@ export default function AgregarComparables() {
   const [pageReady, setPageReady] = useState(false)
   const { dispatch } = useWizard()
   const navigate = useNavigate()
+  const confirm = useConfirm()
 
   useEffect(() => {
     getACM(id).then((acm) => {
@@ -101,9 +104,9 @@ export default function AgregarComparables() {
 
   function validate(v) {
     const err = {}
-    if (!v.precio || Number(v.precio) <= 0) err.precio = 'Requerido'
+    if (!v.precio || Number(v.precio) <= 0) err.precio = getFriendlyFieldError('Requerido')
     if (!v.superficie_cubierta || Number(v.superficie_cubierta) <= 0) {
-      err.superficie_cubierta = 'Debe ser mayor a 0'
+      err.superficie_cubierta = getFriendlyFieldError('Debe ser mayor a 0')
     }
     return err
   }
@@ -198,12 +201,21 @@ export default function AgregarComparables() {
   }
 
   async function handleDelete(cid) {
-    if (!confirm('¿Eliminar esta comparable?')) return
+    const accepted = await confirm({
+      tone: 'danger',
+      eyebrow: 'Eliminar comparable',
+      title: 'Esta comparable se va a quitar de la tasación',
+      description: 'Podés volver a cargarla después, pero se perderán los cambios hechos sobre este registro.',
+      confirmLabel: 'Eliminar comparable',
+      cancelLabel: 'Mantener comparable',
+    })
+    if (!accepted) return
+
     try {
       await deleteComparable(id, cid)
       setComparables((prev) => prev.filter((c) => c.id !== cid))
     } catch (e) {
-      alert('Error: ' + e.message)
+      setApiError(e.message)
     }
   }
 
@@ -230,7 +242,14 @@ export default function AgregarComparables() {
 
       <div className="workflow-layout workflow-layout--single">
         <div className="workflow-main">
-          {apiError && <div className="alert alert-error">{apiError}</div>}
+          {apiError && (
+            <InlineNotice
+              tone="error"
+              title="No pudimos guardar la comparable"
+              description={apiError}
+              className="notice--spaced"
+            />
+          )}
 
           <section className="workflow-stats-grid" aria-label="Resumen del paso">
             <article className="workflow-stat-card">
@@ -387,9 +406,13 @@ export default function AgregarComparables() {
                       <div className="workflow-inline-meta">Fuente detectada: <strong>{currentSource}</strong></div>
                     )}
                     {extractError && (
-                      <div className="alert alert-error" style={{ marginTop: 6, fontSize: 13 }}>
-                        {extractError}
-                      </div>
+                      <InlineNotice
+                        tone="warning"
+                        title="No pudimos completar la extracción automática"
+                        description={extractError}
+                        compact
+                        className="notice--tight"
+                      />
                     )}
                   </div>
                   <div className="form-group full">
@@ -479,7 +502,7 @@ export default function AgregarComparables() {
         </button>
       </div>
       {comparables.length === 0 && (
-        <p className="error-msg" style={{ textAlign: 'right', marginTop: 4 }}>Agregá al menos una comparable para continuar.</p>
+        <p className="error-msg" style={{ textAlign: 'right', marginTop: 4 }}>Sumá al menos una comparable para avanzar al siguiente paso.</p>
       )}
 
       {extractPreview && (

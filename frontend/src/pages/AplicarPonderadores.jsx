@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getACM, getResultado, updateComparable } from '../api.js'
-import { useWizard, WizardNav } from '../App.jsx'
+import { useConfirm, useWizard, WizardNav } from '../App.jsx'
+import InlineNotice from '../components/InlineNotice.jsx'
 import Tooltip from '../components/Tooltip.jsx'
 import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
@@ -373,6 +374,7 @@ export default function AplicarPonderadores() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const { dispatch } = useWizard()
+  const confirm = useConfirm()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -461,7 +463,14 @@ export default function AplicarPonderadores() {
         <h1>Ponderadores</h1>
         <p>Calibrá cada comparable contra el sujeto y revisá el impacto del ajuste antes de calcular resultados.</p>
       </div>
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && (
+        <InlineNotice
+          tone="error"
+          title="No pudimos actualizar los ponderadores"
+          description={error}
+          className="notice--spaced"
+        />
+      )}
 
       <div className="workflow-toolbar">
         <div className="workflow-toolbar__group">
@@ -487,15 +496,21 @@ export default function AplicarPonderadores() {
           <span className="workflow-toolbar__label">Modo</span>
           <button
             className={`btn btn-sm ${advancedMode ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => {
+            onClick={async () => {
               if (advancedMode) {
                 const hasActive = comparables.some(comp =>
                   ADV_FACTORS.some(f => Math.abs((factorMap[comp.id]?.[f.key] ?? 1) - 1) > 0.001)
                 )
                 if (hasActive) {
-                  if (!window.confirm(
-                    'Hay factores avanzados activos. Desactivar el modo avanzado los reseteará a 1.000 en todas las comparables. ¿Continuar?'
-                  )) return
+                  const accepted = await confirm({
+                    tone: 'warning',
+                    eyebrow: 'Modo avanzado',
+                    title: 'Se van a reiniciar los factores avanzados',
+                    description: 'Si desactivás este modo, cochera, pileta, luminosidad, vistas y amenities volverán a su valor base en todas las comparables.',
+                    confirmLabel: 'Desactivar y reiniciar',
+                    cancelLabel: 'Mantener modo avanzado',
+                  })
+                  if (!accepted) return
                   setFactorMap(prev => {
                     const next = { ...prev }
                     for (const comp of comparables) {
