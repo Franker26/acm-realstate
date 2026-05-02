@@ -390,10 +390,13 @@ def _save_platform_setting(db: Session, key: str, value: str) -> None:
 
 def _get_scraper_settings(db: Session) -> dict:
     """Read global scraper settings with env var fallback."""
+    def _url(val):
+        return (val or "").rstrip("/") or None
+
     return {
-        "scraper_service_url": _get_platform_setting(db, "scraper_service_url") or _SCRAPER_SERVICE_URL,
+        "scraper_service_url": _url(_get_platform_setting(db, "scraper_service_url") or _SCRAPER_SERVICE_URL),
         "scraper_service_token": _get_platform_setting(db, "scraper_service_token") or _SCRAPER_SERVICE_TOKEN,
-        "scraper_service_url_backup": _get_platform_setting(db, "scraper_service_url_backup") or _SCRAPER_SERVICE_URL_BACKUP,
+        "scraper_service_url_backup": _url(_get_platform_setting(db, "scraper_service_url_backup") or _SCRAPER_SERVICE_URL_BACKUP),
         "scraper_service_token_backup": _get_platform_setting(db, "scraper_service_token_backup") or _SCRAPER_SERVICE_TOKEN_BACKUP,
     }
 
