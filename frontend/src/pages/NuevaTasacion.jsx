@@ -146,9 +146,27 @@ export default function NuevaTasacion() {
     <div>
       <WizardNav currentStep={1} />
       <div className="step-header">
-        <span className="page-eyebrow">Paso 1</span>
-        <h1>{id ? 'Editar tasación' : 'Nueva Tasación'}</h1>
-        <p>Ingresá los datos de la propiedad a tasar (sujeto del ACM).</p>
+        <div className="step-header__content">
+          <div className="step-header__copy">
+            <span className="page-eyebrow">Paso 1</span>
+            <h1>{id ? 'Editar tasación' : 'Nueva tasación'}</h1>
+            <p>Definí el sujeto del ACM con una ficha clara, consistente y lista para alimentar el resto del pipeline.</p>
+          </div>
+
+          <div className="step-header__signals">
+            <article className="step-header__signal">
+              <span className="step-header__signal-label">Estado del flujo</span>
+              <strong>{id ? 'Ficha en edición' : 'Inicio del análisis'}</strong>
+              <p>{id ? 'Vas a actualizar la base del sujeto antes de continuar con mercado y ajustes.' : 'Completá el sujeto para destrabar comparables, ponderadores y resultados.'}</p>
+            </article>
+
+            <article className="step-header__signal">
+              <span className="step-header__signal-label">Tipo objetivo</span>
+              <strong>{preselectedTipo || values.tipo || 'A definir en la ficha'}</strong>
+              <p>{preselectedTipo ? 'El tipo ya viene preseleccionado desde el inicio rápido del flujo.' : 'Podés dejar configurado el tipo del inmueble dentro de las características.'}</p>
+            </article>
+          </div>
+        </div>
       </div>
 
       {apiError && (
@@ -229,15 +247,27 @@ export default function NuevaTasacion() {
             <div className="card workflow-card workflow-card--compact">
               <div className="section-heading">
                 <div>
-                  <span className="section-heading__eyebrow">Checklist</span>
-                  <h2>Antes de continuar</h2>
+                  <span className="section-heading__eyebrow">Ritmo del paso</span>
+                  <h2>Qué deja listo esta etapa</h2>
                 </div>
               </div>
               <ul className="workflow-checklist">
-                <li>Nombre claro para ubicar rápido la tasación.</li>
-                <li>Dirección precisa para comparar con mercado similar.</li>
-                <li>Superficie cubierta completa para calcular el valor base.</li>
+                <li>Nombre claro para retomar la tasación desde el tablero.</li>
+                <li>Dirección precisa para relacionar el sujeto con el mercado comparable.</li>
+                <li>Superficie y atributos consistentes para calcular el valor base.</li>
               </ul>
+            </div>
+
+            <div className="card workflow-card">
+              <div className="section-heading">
+                <div>
+                  <span className="section-heading__eyebrow">Próximo paso</span>
+                  <h2>Comparables y extracción</h2>
+                </div>
+              </div>
+              <p className="workflow-note">
+                Cuando guardes esta ficha, pasás directo al paso 2 para cargar publicaciones, extraer datos base y construir la muestra de mercado.
+              </p>
             </div>
           </aside>
         </div>

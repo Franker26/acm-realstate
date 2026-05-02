@@ -130,17 +130,18 @@ function WizardProvider({ children }) {
 }
 
 const STEPS = [
-  { num: 1, label: 'Sujeto' },
-  { num: 2, label: 'Comparables' },
-  { num: 3, label: 'Ponderadores' },
-  { num: 4, label: 'Resultados' },
-  { num: 5, label: 'Exportar PDF' },
+  { num: 1, label: 'Sujeto', description: 'Ficha base del inmueble' },
+  { num: 2, label: 'Comparables', description: 'Base de mercado activa' },
+  { num: 3, label: 'Ponderadores', description: 'Ajustes y calibración' },
+  { num: 4, label: 'Resultados', description: 'Valor estimado y rango' },
+  { num: 5, label: 'Exportar PDF', description: 'Cierre y entrega' },
 ]
 
 function WizardNavInner({ currentStep }) {
   const { state } = useWizard()
   const navigate = useNavigate()
   const acmId = state.acmId
+  const progress = Math.round((currentStep / STEPS.length) * 100)
 
   function goToStep(num) {
     if (!acmId) return
@@ -149,24 +150,45 @@ function WizardNavInner({ currentStep }) {
   }
 
   return (
-    <nav className="wizard-nav">
-      {STEPS.map((s) => {
-        const isDone = currentStep > s.num
-        const isActive = currentStep === s.num
-        const isClickable = acmId && s.num !== currentStep && s.num <= currentStep + 1
-        return (
-          <div
-            key={s.num}
-            className={`wizard-step${isActive ? ' active' : ''}${isDone ? ' done' : ''}${isClickable ? ' clickable' : ''}`}
-            onClick={() => isClickable && goToStep(s.num)}
-            title={isClickable ? `Ir al paso ${s.num}` : undefined}
-          >
-            <span className="step-num">{isDone ? '✓' : s.num}</span>
-            <span className="step-label">{s.label}</span>
+    <section className="wizard-shell" aria-label="Pipeline de confección">
+      <div className="wizard-shell__header">
+        <div>
+          <span className="wizard-shell__eyebrow">Pipeline</span>
+          <strong>Confección de tasación</strong>
+        </div>
+        <div className="wizard-shell__progress" aria-label={`Progreso ${progress}%`}>
+          <span>{currentStep} de {STEPS.length}</span>
+          <div className="wizard-shell__progress-track" aria-hidden="true">
+            <div className="wizard-shell__progress-fill" style={{ width: `${progress}%` }} />
           </div>
-        )
-      })}
-    </nav>
+        </div>
+      </div>
+
+      <nav className="wizard-nav">
+        {STEPS.map((s) => {
+          const isDone = currentStep > s.num
+          const isActive = currentStep === s.num
+          const isClickable = acmId && s.num !== currentStep && s.num <= currentStep + 1
+          const statusLabel = isDone ? 'Completo' : isActive ? 'Actual' : `Paso ${s.num}`
+
+          return (
+            <div
+              key={s.num}
+              className={`wizard-step${isActive ? ' active' : ''}${isDone ? ' done' : ''}${isClickable ? ' clickable' : ''}`}
+              onClick={() => isClickable && goToStep(s.num)}
+              title={isClickable ? `Ir al paso ${s.num}` : undefined}
+            >
+              <span className="step-num">{isDone ? '✓' : s.num}</span>
+              <span className="wizard-step__copy">
+                <span className="step-label">{s.label}</span>
+                <span className="step-meta">{s.description}</span>
+              </span>
+              <span className="wizard-step__status">{statusLabel}</span>
+            </div>
+          )
+        })}
+      </nav>
+    </section>
   )
 }
 
