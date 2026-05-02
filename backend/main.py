@@ -205,7 +205,38 @@ async def lifespan(app: FastAPI):
                 ))
         db.commit()
 
-        # 5. Bootstrap superadmin from env vars (only if username doesn't exist yet)
+        # 5. Seed default modifier options per company (if company has none yet)
+        _DEFAULT_MODIFIER_SEED = [
+            ("antiguedad_por_decada",    "Por década de diferencia",        0.05),
+            ("estado_a_refaccionar",     "A refaccionar vs Standard",       0.10),
+            ("calidad_superior",         "Superior (factor directo)",        0.90),
+            ("calidad_inferior",         "Inferior (factor directo)",        1.10),
+            ("superficie_por_decima",    "Por décima de ratio",              0.02),
+            ("piso_por_nivel",           "Por nivel de diferencia",          0.015),
+            ("orientacion_sur_vs_norte", "Sur vs Norte",                     0.05),
+            ("orientacion_interno",      "Interno vs cualquier orientación", 0.10),
+            ("distribucion_mala",        "Regular vs Buena",                 0.05),
+            ("oferta_mas_de_un_anio",    "Oferta +12 meses en mercado",      0.88),
+            ("oferta_menos_de_un_anio",  "Oferta -12 meses en mercado",      0.90),
+            ("oportunidad_mercado",      "Precio de oportunidad",            0.95),
+            ("cochera",                  "Diferencia de cochera",            0.05),
+            ("pileta",                   "Diferencia de pileta",             0.08),
+        ]
+        for company in db.query(Company).all():
+            has_modifiers = db.query(ModifierOption).filter(
+                ModifierOption.company_id == company.id
+            ).first()
+            if not has_modifiers:
+                for factor_key, option_label, factor_value in _DEFAULT_MODIFIER_SEED:
+                    db.add(ModifierOption(
+                        company_id=company.id,
+                        factor_key=factor_key,
+                        option_label=option_label,
+                        factor_value=factor_value,
+                    ))
+        db.commit()
+
+        # 6. Bootstrap superadmin from env vars (only if username doesn't exist yet)
         sa_user = os.getenv("SUPERADMIN_USERNAME")
         sa_pass = os.getenv("SUPERADMIN_PASSWORD")
         if sa_user and sa_pass:
@@ -870,6 +901,15 @@ def get_resultado(acm_id: int, request: Request, db: Session = Depends(get_db)):
 
     subject = _make_snapshot(acm)
 
+    # Build defaults dict from company's modifier options, falling back to calc.DEFAULTS
+    current = _current_user(request, db)
+    company_modifiers = (
+        db.query(ModifierOption)
+        .filter(ModifierOption.company_id == current.company_id)
+        .all()
+    )
+    company_defaults = {**calc.DEFAULTS, **{m.factor_key: m.factor_value for m in company_modifiers}}
+
     comp_resultados = []
     adjusted_prices = []
 
@@ -898,6 +938,7 @@ def get_resultado(acm_id: int, request: Request, db: Session = Depends(get_db)):
             dias_mercado=comp.dias_mercado,
             oportunidad_mercado=comp.oportunidad_mercado or False,
             overrides=overrides,
+            defaults=company_defaults,
         )
         adjusted_prices.append(r["precio_ajustado_m2"])
         comp_resultados.append(ComparableResultado(
