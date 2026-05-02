@@ -100,7 +100,16 @@ export default function FloatingCalculator() {
         title="Calculadora"
         aria-label="Abrir calculadora"
       >
-        <span className="float-calc-toggle__icon">⌗</span>
+        <span className="float-calc-toggle__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="5" y="3.5" width="14" height="17" rx="3" />
+            <path d="M8.5 7.5h7" />
+            <path d="M8.5 11.5h2" />
+            <path d="M13.5 11.5h2" />
+            <path d="M8.5 15.5h2" />
+            <path d="M13.5 15.5h2" />
+          </svg>
+        </span>
       </button>
 
       {open && (
