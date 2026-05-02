@@ -24,7 +24,11 @@ class ZonapropAdapter(BaseAdapter):
             async with httpx.AsyncClient(timeout=30) as client:
                 r = await client.post(f"{scraper_url}/extract", json={"url": url}, headers=headers)
             if r.status_code == 200:
-                return r.json()
+                data = r.json()
+                # Un body con "detail" indica un error del scraper disfrazado de 200
+                if "detail" in data:
+                    raise HTTPException(502, f"Scraper de Zonaprop respondió con error: {data['detail']}")
+                return data
             raise HTTPException(r.status_code, r.text)
         except HTTPException:
             raise

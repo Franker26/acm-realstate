@@ -1044,7 +1044,10 @@ async def extract_property(body: ExtractRequest, request: Request, db: Session =
             "scraper_service_url": backup_url,
             "scraper_service_token": settings.get("scraper_service_token_backup") or "",
         }
-        return await integration_extract(body.url.strip(), backup_settings)
+        try:
+            return await integration_extract(body.url.strip(), backup_settings)
+        except Exception:
+            pass  # backup también falló, re-raise el error del primario
 
     raise primary_err
 
