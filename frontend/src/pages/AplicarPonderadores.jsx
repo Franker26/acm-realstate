@@ -456,6 +456,11 @@ export default function AplicarPonderadores() {
   return (
     <div>
       <WizardNav currentStep={3} />
+      <div className="step-header step-header--compact">
+        <span className="page-eyebrow">Ajuste de comparables</span>
+        <h1>Ponderadores</h1>
+        <p>Calibrá cada comparable contra el sujeto y revisá el impacto del ajuste antes de calcular resultados.</p>
+      </div>
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="workflow-toolbar">

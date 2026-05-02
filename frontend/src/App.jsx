@@ -120,6 +120,17 @@ export function useWizard() {
   return useContext(WizardContext)
 }
 
+function initials(name = '') {
+  return name.slice(0, 2).toUpperCase() || 'AC'
+}
+
+function avatarColor(seed = '') {
+  let hash = 0
+  for (const char of seed) hash = char.charCodeAt(0) + ((hash << 5) - hash)
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 55%, 46%)`
+}
+
 function WizardProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState)
   const chartRef = useRef(null)
@@ -159,10 +170,16 @@ function WizardNavInner({ currentStep }) {
         {user && (
           <div className="wizard-shell__user">
             <div className="wizard-shell__user-avatar">
-              {user.username.slice(0, 1).toUpperCase()}
+              <span
+                className="wizard-shell__user-avatar-mark"
+                style={{ background: avatarColor(user.username || 'Usuario') }}
+              >
+                {initials(user.username || 'Usuario')}
+              </span>
             </div>
             <div className="wizard-shell__user-copy">
               <strong>{user.username}</strong>
+              <span>{user.is_approver ? 'Admin approver' : user.is_admin ? 'Administrador' : 'Workspace operativo'}</span>
             </div>
           </div>
         )}
