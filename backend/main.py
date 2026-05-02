@@ -393,8 +393,8 @@ def _get_scraper_settings(db: Session) -> dict:
     return {
         "scraper_service_url": _get_platform_setting(db, "scraper_service_url") or _SCRAPER_SERVICE_URL,
         "scraper_service_token": _get_platform_setting(db, "scraper_service_token") or _SCRAPER_SERVICE_TOKEN,
-        "scraper_service_url_backup": _get_platform_setting(db, "scraper_service_url_backup"),
-        "scraper_service_token_backup": _get_platform_setting(db, "scraper_service_token_backup"),
+        "scraper_service_url_backup": _get_platform_setting(db, "scraper_service_url_backup") or _SCRAPER_SERVICE_URL_BACKUP,
+        "scraper_service_token_backup": _get_platform_setting(db, "scraper_service_token_backup") or _SCRAPER_SERVICE_TOKEN_BACKUP,
     }
 
 
@@ -1018,6 +1018,8 @@ def delete_modifier(mid: int, request: Request, db: Session = Depends(get_db)):
 
 _SCRAPER_SERVICE_URL = os.getenv("SCRAPER_SERVICE_URL")
 _SCRAPER_SERVICE_TOKEN = os.getenv("SCRAPER_SERVICE_TOKEN", "")
+_SCRAPER_SERVICE_URL_BACKUP = os.getenv("SCRAPER_SERVICE_URL_BACKUP")
+_SCRAPER_SERVICE_TOKEN_BACKUP = os.getenv("SCRAPER_SERVICE_TOKEN_BACKUP", "")
 
 
 class ExtractRequest(PydanticBase):
@@ -1047,7 +1049,11 @@ async def extract_property(body: ExtractRequest, request: Request, db: Session =
         try:
             return await integration_extract(body.url.strip(), backup_settings)
         except Exception:
-            pass  # backup también falló, re-raise el error del primario
+            raise HTTPException(
+                503,
+                "El scraper no está disponible (primario y backup fallaron). "
+                "Intentá de nuevo en unos minutos o completá los datos manualmente.",
+            )
 
     raise primary_err
 
