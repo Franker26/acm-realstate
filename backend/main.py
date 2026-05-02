@@ -908,6 +908,71 @@ def get_defaults():
     return PonderadoresDefaults(**calc.DEFAULTS)
 
 
+# --- Mapa estático del ACM ---
+
+@app.get("/api/acm/{acm_id}/map")
+def get_acm_map(acm_id: int, request: Request, db: Session = Depends(get_db)):
+    from map_generator import generate_map_image
+    acm = _get_acm_checked(acm_id, request, db)
+    comp_addresses = [c.direccion for c in acm.comparables if c.direccion]
+    map_b64 = generate_map_image(acm.direccion, comp_addresses)
+    if not map_b64:
+        raise HTTPException(status_code=503, detail="No se pudo generar el mapa para esta dirección")
+    return {"map_image": map_b64}
+
+
+# --- Modifier options ---
+
+@app.get("/api/modifiers", response_model=list[ModifierOptionRead])
+def list_modifiers(request: Request, db: Session = Depends(get_db)):
+    current = _current_user(request, db)
+    return (
+        db.query(ModifierOption)
+        .filter(ModifierOption.company_id == current.company_id)
+        .order_by(ModifierOption.factor_key, ModifierOption.option_label)
+        .all()
+    )
+
+
+@app.post("/api/modifiers", response_model=ModifierOptionRead, status_code=201)
+def create_modifier(body: ModifierOptionCreate, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    obj = ModifierOption(**body.model_dump(), company_id=current.company_id)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.put("/api/modifiers/{mid}", response_model=ModifierOptionRead)
+def update_modifier(mid: int, body: ModifierOptionUpdate, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    obj = db.query(ModifierOption).filter(
+        ModifierOption.id == mid, ModifierOption.company_id == current.company_id
+    ).first()
+    if not obj:
+        raise HTTPException(404, "Modificador no encontrado")
+    for k, v in body.model_dump(exclude_none=True).items():
+        setattr(obj, k, v)
+    obj.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.delete("/api/modifiers/{mid}", status_code=204)
+def delete_modifier(mid: int, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    obj = db.query(ModifierOption).filter(
+        ModifierOption.id == mid, ModifierOption.company_id == current.company_id
+    ).first()
+    if not obj:
+        raise HTTPException(404, "Modificador no encontrado")
+    db.delete(obj)
+    db.commit()
+
+
+
 # --- Integrations ---
 
 _SCRAPER_SERVICE_URL = os.getenv("SCRAPER_SERVICE_URL")
