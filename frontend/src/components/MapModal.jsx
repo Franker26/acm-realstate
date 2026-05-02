@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { LoadingState } from './StatusState.jsx'
 
 export default function MapModal({ address, onClose }) {
   const [coords, setCoords] = useState(null)
@@ -32,8 +33,13 @@ export default function MapModal({ address, onClose }) {
         <div className="map-modal__body">
           {!coords && !error && (
             <div className="map-modal__loading">
-              <span className="spinner" />
-              <span>Buscando dirección…</span>
+              <LoadingState
+                eyebrow="Mapa"
+                title="Estamos ubicando la dirección"
+                subtitle="Buscamos la referencia en OpenStreetMap para abrir el punto exacto."
+                messages={['Buscando dirección...', 'Consultando mapa...', 'Preparando vista...']}
+                mode="inline"
+              />
             </div>
           )}
           {error && <div className="map-modal__error">{error}</div>}

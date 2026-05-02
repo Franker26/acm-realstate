@@ -42,46 +42,64 @@ export function LoadingState({
   messages,
   step,
   source,
+  metrics,
   mode = 'page',
 }) {
   const typed = useTypewriter(messages)
-  const shellClassName = `status-shell status-shell--${mode}`
+  const shellClassName = `status-shell status-shell--${mode} status-shell--loading`
 
   return (
     <section className={shellClassName} aria-live="polite" aria-busy="true">
       <div className="status-card status-card--loading">
-        <div className="status-card__visual" aria-hidden="true">
-          <div className="status-skeleton">
-            <div className="status-skeleton__card">
-              <span className="status-skeleton__title" />
-              <span className="status-skeleton__line status-skeleton__line--short" />
-              <span className="status-skeleton__line status-skeleton__line--glow" />
-            </div>
-            <div className="status-skeleton__card">
-              <span className="status-skeleton__title status-skeleton__title--small" />
-              <span className="status-skeleton__line" />
-              <span className="status-skeleton__line status-skeleton__line--glow status-skeleton__line--wide" />
-            </div>
-          </div>
+        <div className="status-card__ambient" aria-hidden="true">
+          <span className="status-card__ambient-orb status-card__ambient-orb--primary" />
+          <span className="status-card__ambient-orb status-card__ambient-orb--accent" />
         </div>
 
-        <div className="status-card__body">
-          <span className="status-card__eyebrow">{eyebrow}</span>
-          {step && (
-            <div className="status-badge">
-              <span className="status-badge__dot" />
-              <span>{step}</span>
+        <div className="status-card__loading-main">
+          <div className="status-card__loading-copy">
+            <span className="status-card__eyebrow">{eyebrow}</span>
+
+            {(step || source) && (
+              <div className="status-card__meta-row">
+                {step && (
+                  <div className="status-badge">
+                    <span className="status-badge__dot" />
+                    <span>{step}</span>
+                  </div>
+                )}
+                {source && <div className="status-card__meta-pill">{source}</div>}
+              </div>
+            )}
+
+            {title && <h2 className="status-card__title">{title}</h2>}
+            {subtitle && <p className="status-card__description">{subtitle}</p>}
+
+            <div className="status-card__signal" aria-hidden="true">
+              <span />
+              <span />
+              <span />
             </div>
-          )}
-          <div className="status-typewriter">
-            {typed}
-            <span className="status-typewriter__cursor" />
-          </div>
-          {title && <h2 className="status-card__title">{title}</h2>}
-          {subtitle && <p className="status-card__description">{subtitle}</p>}
-          {source && <div className="status-card__meta">{source}</div>}
-          <div className="status-progress" aria-hidden="true">
-            <div className="status-progress__fill" />
+
+            <div className="status-typewriter">
+              {typed}
+              <span className="status-typewriter__cursor" />
+            </div>
+
+            <div className="status-progress" aria-hidden="true">
+              <div className="status-progress__fill" />
+            </div>
+
+            {metrics?.length ? (
+              <div className="status-metrics">
+                {metrics.map((metric) => (
+                  <article key={metric.label} className="status-metric">
+                    <span>{metric.label}</span>
+                    <strong>{metric.value}</strong>
+                  </article>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -123,40 +141,14 @@ export function MobileWorkspaceLoading({
   messages,
   metrics,
 }) {
-  const typed = useTypewriter(messages, 60, 1400)
-
   return (
-    <section className="mobile-loading-shell" aria-live="polite" aria-busy="true">
-      <div className="mobile-loading-shell__hero">
-        <span className="mobile-loading-shell__eyebrow">{eyebrow}</span>
-        {title && <h1>{title}</h1>}
-        {subtitle && <p>{subtitle}</p>}
-        {metrics?.length ? (
-          <div className="mobile-loading-shell__metrics">
-            {metrics.map((metric) => (
-              <article key={metric.label} className="mobile-loading-shell__metric">
-                <span>{metric.label}</span>
-                <strong>{metric.value}</strong>
-              </article>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="mobile-loading-shell__card">
-        <div className="mobile-loading-shell__pulse">
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="mobile-loading-shell__typewriter">
-          {typed}
-          <span className="mobile-loading-shell__cursor" />
-        </div>
-        <div className="mobile-loading-shell__track" aria-hidden="true">
-          <div className="mobile-loading-shell__fill" />
-        </div>
-      </div>
-    </section>
+    <LoadingState
+      eyebrow={eyebrow}
+      title={title}
+      subtitle={subtitle}
+      messages={messages}
+      metrics={metrics}
+      mode="page"
+    />
   )
 }
