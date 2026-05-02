@@ -21,8 +21,9 @@ import AdminLogin from './pages/admin/AdminLogin.jsx'
 import AdminDashboard from './pages/admin/AdminDashboard.jsx'
 import AdminCompanyDetail from './pages/admin/AdminCompanyDetail.jsx'
 import AdminSettings from './pages/admin/AdminSettings.jsx'
-import NotFound from './pages/NotFound.jsx'
+import ErrorPage from './pages/ErrorPage.jsx'
 import FloatingCalculator from './components/FloatingCalculator.jsx'
+import AppErrorBoundary from './components/AppErrorBoundary.jsx'
 import { getBrandingSettings, getCurrentUser, loginUser } from './api.js'
 
 // --- Auth ---
@@ -253,7 +254,7 @@ function AppHeader() {
     navigate('/login')
   }
 
-  if (location.pathname === '/login' || location.pathname.startsWith('/admin')) return null
+  if (location.pathname === '/login' || location.pathname.startsWith('/admin') || location.pathname.startsWith('/error')) return null
   const isHomeRoute = location.pathname === '/'
   const isApprovalsRoute = location.pathname === '/approvals'
   const isSettingsRoute = location.pathname === '/settings'
@@ -346,6 +347,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/error/:code" element={<ErrorPage />} />
       <Route path="/" element={<PrivateRoute><Home /></PrivateRoute>} />
       <Route path="/acm/tipo" element={<PrivateRoute><TipoACM /></PrivateRoute>} />
       <Route path="/acm/new" element={<PrivateRoute><NuevaTasacion /></PrivateRoute>} />
@@ -362,8 +364,23 @@ function AppRoutes() {
       <Route path="/admin/companies/:id" element={<AdminRoute><AdminCompanyDetail /></AdminRoute>} />
       <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
       <Route path="/admin/*" element={<AdminLogin />} />
-      <Route path="*" element={<NotFound />} />
+      <Route path="*" element={<Navigate to="/error/404" replace />} />
     </Routes>
+  )
+}
+
+function AppShell() {
+  const location = useLocation()
+  const isErrorRoute = location.pathname.startsWith('/error') || location.pathname === '/404'
+
+  return (
+    <>
+      <AppHeader />
+      <main className={`app-main${isErrorRoute ? ' app-main--error' : ''}`}>
+        <AppRoutes />
+      </main>
+      {!isErrorRoute ? <FloatingCalculator /> : null}
+    </>
   )
 }
 
@@ -414,15 +431,13 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <WizardProvider>
-          <AppHeader />
-          <main className="app-main">
-            <AppRoutes />
-          </main>
-          <FloatingCalculator />
-        </WizardProvider>
-      </AuthProvider>
+      <AppErrorBoundary>
+        <AuthProvider>
+          <WizardProvider>
+            <AppShell />
+          </WizardProvider>
+        </AuthProvider>
+      </AppErrorBoundary>
     </BrowserRouter>
   )
 }

@@ -10,6 +10,7 @@ import {
   adminUpdateCompany,
   adminUpdateUser,
 } from '../../adminApi.js'
+import { LoadingState } from '../../components/StatusState.jsx'
 
 function UsersSection({ companyId }) {
   const [users, setUsers] = useState([])
@@ -208,7 +209,17 @@ function AcmsSection({ companyId }) {
       .finally(() => setLoading(false))
   }, [companyId])
 
-  if (loading) return <p className="admin-muted">Cargando tasaciones...</p>
+  if (loading) {
+    return (
+      <LoadingState
+        eyebrow="Admin"
+        title="Estamos cargando las tasaciones"
+        subtitle="Traemos la actividad de la empresa para completar el detalle operativo."
+        messages={['Cargando tasaciones...', 'Ordenando actividad...', 'Preparando detalle...']}
+        mode="inline"
+      />
+    )
+  }
 
   return (
     <div className="admin-section">
@@ -280,7 +291,19 @@ export default function AdminCompanyDetail() {
     }
   }
 
-  if (!company && !error) return <div className="admin-page"><p className="admin-muted">Cargando...</p></div>
+  if (!company && !error) {
+    return (
+      <div className="admin-page">
+        <LoadingState
+          eyebrow="Admin"
+          title="Estamos cargando la empresa"
+          subtitle="Recuperamos usuarios, permisos y actividad para que puedas administrarla sin perder contexto."
+          messages={['Cargando empresa...', 'Sincronizando usuarios...', 'Preparando panel...']}
+          mode="page"
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="admin-page">
