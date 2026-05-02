@@ -963,19 +963,6 @@ def get_defaults():
     return PonderadoresDefaults(**calc.DEFAULTS)
 
 
-# --- Mapa estático del ACM ---
-
-@app.get("/api/acm/{acm_id}/map")
-def get_acm_map(acm_id: int, request: Request, db: Session = Depends(get_db)):
-    from map_generator import generate_map_image
-    acm = _get_acm_checked(acm_id, request, db)
-    comp_addresses = [c.direccion for c in acm.comparables if c.direccion]
-    map_b64 = generate_map_image(acm.direccion, comp_addresses)
-    if not map_b64:
-        raise HTTPException(status_code=503, detail="No se pudo generar el mapa para esta dirección")
-    return {"map_image": map_b64}
-
-
 # --- Modifier options ---
 
 @app.get("/api/modifiers", response_model=list[ModifierOptionRead])
@@ -1025,7 +1012,6 @@ def delete_modifier(mid: int, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(404, "Modificador no encontrado")
     db.delete(obj)
     db.commit()
-
 
 
 # --- Integrations ---

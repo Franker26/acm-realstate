@@ -85,8 +85,6 @@ export const updateBrandingSettings = (data) => request('PUT', '/api/settings/br
 export const getIntegrationStatus = () => request('GET', '/api/settings/integrations/status')
 export const getSystemParams = () => request('GET', '/api/settings/params')
 
-export const getACMMap = (id) => request('GET', `/api/acm/${id}/map`)
-
 export const listModifiers = () => request('GET', '/api/modifiers')
 export const createModifier = (data) => request('POST', '/api/modifiers', data)
 export const updateModifier = (id, data) => request('PUT', `/api/modifiers/${id}`, data)
