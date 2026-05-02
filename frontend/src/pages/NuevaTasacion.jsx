@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { createACM, getACM, updateACM } from '../api.js'
 import { useWizard, WizardNav } from '../App.jsx'
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx'
+import MapModal from '../components/MapModal.jsx'
 import PropertyForm from '../components/PropertyForm.jsx'
 import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
@@ -89,6 +90,7 @@ export default function NuevaTasacion() {
   const [submitting, setSubmitting] = useState(false)
   const [apiError, setApiError] = useState(null)
   const [loading, setLoading] = useState(!!id)
+  const [mapOpen, setMapOpen] = useState(false)
   const { dispatch } = useWizard()
   const navigate = useNavigate()
 
@@ -145,10 +147,10 @@ export default function NuevaTasacion() {
   return (
     <div>
       <WizardNav currentStep={1} />
-      <div className="step-header">
+      <div className="step-header step-header--compact">
         <span className="page-eyebrow">Paso 1</span>
-        <h1>{id ? 'Editar tasación' : 'Nueva Tasación'}</h1>
-        <p>Ingresá los datos de la propiedad a tasar (sujeto del ACM).</p>
+        <h1>{id ? 'Editar tasación' : 'Nueva tasación'}</h1>
+        <p>Definí el sujeto con una ficha clara y dejá la base lista para cargar comparables, ajustar factores y calcular el valor final.</p>
       </div>
 
       {apiError && (
@@ -162,7 +164,7 @@ export default function NuevaTasacion() {
       )}
 
       <form onSubmit={handleSubmit}>
-        <div className="workflow-layout">
+        <div className="workflow-layout workflow-layout--single">
           <div className="workflow-main">
             <div className="card workflow-card">
               <div className="section-heading">
@@ -187,13 +189,24 @@ export default function NuevaTasacion() {
                 </div>
                 <div className="form-group full">
                   <label>Dirección / Zona *</label>
-                  <AddressAutocomplete
-                    name="direccion"
-                    value={values.direccion}
-                    tabIndex={0}
-                    placeholder="Ej: Av. Corrientes 1234, CABA"
-                    onChange={(v) => handleChange('direccion', v)}
-                  />
+                  <div className="inline-control-row">
+                    <AddressAutocomplete
+                      name="direccion"
+                      value={values.direccion}
+                      tabIndex={0}
+                      placeholder="Ej: Av. Corrientes 1234, CABA"
+                      onChange={(v) => handleChange('direccion', v)}
+                    />
+                    {values.direccion && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setMapOpen(true)}
+                      >
+                        Ver en mapa
+                      </button>
+                    )}
+                  </div>
                   {errors.direccion && <span className="error-msg">{errors.direccion}</span>}
                 </div>
               </div>
@@ -225,21 +238,6 @@ export default function NuevaTasacion() {
             </div>
           </div>
 
-          <aside className="workflow-aside">
-            <div className="card workflow-card workflow-card--compact">
-              <div className="section-heading">
-                <div>
-                  <span className="section-heading__eyebrow">Checklist</span>
-                  <h2>Antes de continuar</h2>
-                </div>
-              </div>
-              <ul className="workflow-checklist">
-                <li>Nombre claro para ubicar rápido la tasación.</li>
-                <li>Dirección precisa para comparar con mercado similar.</li>
-                <li>Superficie cubierta completa para calcular el valor base.</li>
-              </ul>
-            </div>
-          </aside>
         </div>
 
         <div className="btn-group btn-group--workspace">
@@ -252,6 +250,9 @@ export default function NuevaTasacion() {
           </button>
         </div>
       </form>
+      {mapOpen && (
+        <MapModal address={values.direccion} onClose={() => setMapOpen(false)} />
+      )}
     </div>
   )
 }

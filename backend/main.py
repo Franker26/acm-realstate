@@ -4,6 +4,9 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+load_dotenv()
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -43,6 +46,7 @@ from models import (
     Comparable,
     Company,
     CompanySetting,
+    ModifierOption,
     PlatformSetting,
     SessionLocal,
     StageACM,
@@ -113,6 +117,9 @@ from schemas import (
     CompanyCreate,
     CompanyRead,
     CompanyUpdate,
+    ModifierOptionCreate,
+    ModifierOptionRead,
+    ModifierOptionUpdate,
     PonderadoresDefaults,
     ResultadoResponse,
     StageUpdateRequest,
@@ -198,12 +205,48 @@ async def lifespan(app: FastAPI):
                 ))
         db.commit()
 
-        # 5. Bootstrap superadmin from env vars (only if none exists)
+        # 5. Seed default modifier options per company (if company has none yet)
+        _DEFAULT_MODIFIER_SEED = [
+            ("antiguedad_por_decada",    "Por década de diferencia",        0.05),
+            ("estado_a_refaccionar",     "A refaccionar vs Standard",       0.10),
+            ("calidad_superior",         "Superior (factor directo)",        0.90),
+            ("calidad_inferior",         "Inferior (factor directo)",        1.10),
+            ("superficie_por_decima",    "Por décima de ratio",              0.02),
+            ("piso_por_nivel",           "Por nivel de diferencia",          0.015),
+            ("orientacion_sur_vs_norte", "Sur vs Norte",                     0.05),
+            ("orientacion_interno",      "Interno vs cualquier orientación", 0.10),
+            ("distribucion_mala",        "Regular vs Buena",                 0.05),
+            ("oferta_mas_de_un_anio",    "Oferta +12 meses en mercado",      0.88),
+            ("oferta_menos_de_un_anio",  "Oferta -12 meses en mercado",      0.90),
+            ("oportunidad_mercado",      "Precio de oportunidad",            0.95),
+            ("cochera",                  "Diferencia de cochera",            0.05),
+            ("pileta",                   "Diferencia de pileta",             0.08),
+        ]
+        for company in db.query(Company).all():
+            has_modifiers = db.query(ModifierOption).filter(
+                ModifierOption.company_id == company.id
+            ).first()
+            if not has_modifiers:
+                for factor_key, option_label, factor_value in _DEFAULT_MODIFIER_SEED:
+                    db.add(ModifierOption(
+                        company_id=company.id,
+                        factor_key=factor_key,
+                        option_label=option_label,
+                        factor_value=factor_value,
+                    ))
+        db.commit()
+
+        # 6. Bootstrap superadmin from env vars (only if username doesn't exist yet)
         sa_user = os.getenv("SUPERADMIN_USERNAME")
         sa_pass = os.getenv("SUPERADMIN_PASSWORD")
         if sa_user and sa_pass:
-            exists = db.query(User).filter(User.is_superadmin.is_(True)).first()
-            if not exists:
+            existing = db.query(User).filter(User.username == sa_user).first()
+            if existing:
+                if not existing.is_superadmin:
+                    existing.is_superadmin = True
+                    existing.hashed_password = _hash_password(sa_pass)
+                    db.commit()
+            else:
                 db.add(User(
                     username=sa_user,
                     hashed_password=_hash_password(sa_pass),
@@ -350,6 +393,8 @@ def _get_scraper_settings(db: Session) -> dict:
     return {
         "scraper_service_url": _get_platform_setting(db, "scraper_service_url") or _SCRAPER_SERVICE_URL,
         "scraper_service_token": _get_platform_setting(db, "scraper_service_token") or _SCRAPER_SERVICE_TOKEN,
+        "scraper_service_url_backup": _get_platform_setting(db, "scraper_service_url_backup"),
+        "scraper_service_token_backup": _get_platform_setting(db, "scraper_service_token_backup"),
     }
 
 
@@ -856,6 +901,15 @@ def get_resultado(acm_id: int, request: Request, db: Session = Depends(get_db)):
 
     subject = _make_snapshot(acm)
 
+    # Build defaults dict from company's modifier options, falling back to calc.DEFAULTS
+    current = _current_user(request, db)
+    company_modifiers = (
+        db.query(ModifierOption)
+        .filter(ModifierOption.company_id == current.company_id)
+        .all()
+    )
+    company_defaults = {**calc.DEFAULTS, **{m.factor_key: m.factor_value for m in company_modifiers}}
+
     comp_resultados = []
     adjusted_prices = []
 
@@ -884,6 +938,7 @@ def get_resultado(acm_id: int, request: Request, db: Session = Depends(get_db)):
             dias_mercado=comp.dias_mercado,
             oportunidad_mercado=comp.oportunidad_mercado or False,
             overrides=overrides,
+            defaults=company_defaults,
         )
         adjusted_prices.append(r["precio_ajustado_m2"])
         comp_resultados.append(ComparableResultado(
@@ -908,6 +963,57 @@ def get_defaults():
     return PonderadoresDefaults(**calc.DEFAULTS)
 
 
+# --- Modifier options ---
+
+@app.get("/api/modifiers", response_model=list[ModifierOptionRead])
+def list_modifiers(request: Request, db: Session = Depends(get_db)):
+    current = _current_user(request, db)
+    return (
+        db.query(ModifierOption)
+        .filter(ModifierOption.company_id == current.company_id)
+        .order_by(ModifierOption.factor_key, ModifierOption.option_label)
+        .all()
+    )
+
+
+@app.post("/api/modifiers", response_model=ModifierOptionRead, status_code=201)
+def create_modifier(body: ModifierOptionCreate, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    obj = ModifierOption(**body.model_dump(), company_id=current.company_id)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.put("/api/modifiers/{mid}", response_model=ModifierOptionRead)
+def update_modifier(mid: int, body: ModifierOptionUpdate, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    obj = db.query(ModifierOption).filter(
+        ModifierOption.id == mid, ModifierOption.company_id == current.company_id
+    ).first()
+    if not obj:
+        raise HTTPException(404, "Modificador no encontrado")
+    for k, v in body.model_dump(exclude_none=True).items():
+        setattr(obj, k, v)
+    obj.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@app.delete("/api/modifiers/{mid}", status_code=204)
+def delete_modifier(mid: int, request: Request, db: Session = Depends(get_db)):
+    current = _require_admin(request, db)
+    obj = db.query(ModifierOption).filter(
+        ModifierOption.id == mid, ModifierOption.company_id == current.company_id
+    ).first()
+    if not obj:
+        raise HTTPException(404, "Modificador no encontrado")
+    db.delete(obj)
+    db.commit()
+
+
 # --- Integrations ---
 
 _SCRAPER_SERVICE_URL = os.getenv("SCRAPER_SERVICE_URL")
@@ -923,7 +1029,24 @@ async def extract_property(body: ExtractRequest, request: Request, db: Session =
     from integrations import extract as integration_extract
     _current_user(request, db)
     settings = _get_scraper_settings(db)
-    return await integration_extract(body.url.strip(), settings)
+
+    # Try primary scraper
+    primary_err: Exception | None = None
+    try:
+        return await integration_extract(body.url.strip(), settings)
+    except Exception as exc:
+        primary_err = exc
+
+    # Failover to backup scraper if configured
+    backup_url = (settings.get("scraper_service_url_backup") or "").strip()
+    if backup_url:
+        backup_settings = {
+            "scraper_service_url": backup_url,
+            "scraper_service_token": settings.get("scraper_service_token_backup") or "",
+        }
+        return await integration_extract(body.url.strip(), backup_settings)
+
+    raise primary_err
 
 
 # ── Admin endpoints (/api/admin/*) ────────────────────────────────────────────
@@ -1101,6 +1224,20 @@ def admin_list_company_acms(company_id: int, request: Request, db: Session = Dep
 class GlobalIntegrationSettings(PydanticBase):
     scraper_service_url: Optional[str] = None
     scraper_service_token: Optional[str] = None
+    scraper_service_url_backup: Optional[str] = None
+    scraper_service_token_backup: Optional[str] = None
+
+
+async def _check_scraper_health(url: str, token: str) -> bool:
+    if not url:
+        return False
+    try:
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"{url.rstrip('/')}/health", headers=headers)
+        return r.status_code == 200
+    except Exception:
+        return False
 
 
 @app.get("/api/admin/settings/integrations")
@@ -1110,6 +1247,8 @@ def admin_get_integration_settings(request: Request, db: Session = Depends(get_d
     return GlobalIntegrationSettings(
         scraper_service_url=raw.get("scraper_service_url"),
         scraper_service_token="***" if raw.get("scraper_service_token") else None,
+        scraper_service_url_backup=raw.get("scraper_service_url_backup"),
+        scraper_service_token_backup="***" if raw.get("scraper_service_token_backup") else None,
     )
 
 
@@ -1120,6 +1259,10 @@ def admin_update_integration_settings(body: GlobalIntegrationSettings, request: 
         _save_platform_setting(db, "scraper_service_url", body.scraper_service_url.strip())
     if body.scraper_service_token is not None and body.scraper_service_token != "***":
         _save_platform_setting(db, "scraper_service_token", body.scraper_service_token.strip())
+    if body.scraper_service_url_backup is not None:
+        _save_platform_setting(db, "scraper_service_url_backup", body.scraper_service_url_backup.strip())
+    if body.scraper_service_token_backup is not None and body.scraper_service_token_backup != "***":
+        _save_platform_setting(db, "scraper_service_token_backup", body.scraper_service_token_backup.strip())
     return admin_get_integration_settings(request, db)
 
 
@@ -1127,22 +1270,18 @@ def admin_update_integration_settings(body: GlobalIntegrationSettings, request: 
 async def admin_integration_status(request: Request, db: Session = Depends(get_db)):
     _require_superadmin(request, db)
     raw = _get_scraper_settings(db)
-    scraper_url = (raw.get("scraper_service_url") or "").strip()
+    primary_url = (raw.get("scraper_service_url") or "").strip()
+    backup_url = (raw.get("scraper_service_url_backup") or "").strip()
 
-    connected = False
-    if scraper_url:
-        try:
-            token = raw.get("scraper_service_token", "")
-            headers = {"Authorization": f"Bearer {token}"} if token else {}
-            async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.get(f"{scraper_url}/health", headers=headers)
-            connected = r.status_code == 200
-        except Exception:
-            connected = False
+    primary_ok, backup_ok = await asyncio.gather(
+        _check_scraper_health(primary_url, raw.get("scraper_service_token", "") or ""),
+        _check_scraper_health(backup_url, raw.get("scraper_service_token_backup", "") or ""),
+    )
 
     return {
-        "connected": connected,
-        "scraper_url": scraper_url or None,
+        "connected": primary_ok or backup_ok,
+        "primary": {"url": primary_url or None, "connected": primary_ok},
+        "backup": {"url": backup_url or None, "connected": backup_ok},
         "sources": ["zonaprop", "argenprop", "mercadolibre"],
     }
 
@@ -1405,5 +1544,4 @@ async def _fetch_zonaprop(url: str) -> str:  # kept for scraper microservice com
         "Esto puede deberse a restricciones temporales del sitio. "
         "Podés intentar nuevamente o completar los datos manualmente.",
     )
-
 
