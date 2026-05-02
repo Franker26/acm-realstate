@@ -663,23 +663,23 @@ function SystemParamsPanel() {
 // ── Panel: Tabla maestra de modificadores ────────────────────────────────────
 
 const FACTOR_KEY_LABELS = {
-  factor_antiguedad: 'Antigüedad',
-  factor_estado: 'Estado',
-  factor_calidad: 'Calidad',
-  factor_superficie: 'Superficie',
-  factor_piso: 'Piso',
-  factor_orientacion: 'Orientación',
-  factor_distribucion: 'Distribución',
-  factor_oferta: 'Oferta',
-  factor_oportunidad: 'Oportunidad',
-  factor_cochera: 'Cochera',
-  factor_pileta: 'Pileta',
-  factor_luminosidad: 'Luminosidad',
-  factor_vistas: 'Vistas',
-  factor_amenities: 'Amenities',
+  antiguedad_por_decada:    'Antigüedad — por década de diferencia',
+  estado_a_refaccionar:     'Estado — a refaccionar vs standard',
+  calidad_superior:         'Calidad — superior (factor directo)',
+  calidad_inferior:         'Calidad — inferior (factor directo)',
+  superficie_por_decima:    'Superficie — por décima de ratio',
+  piso_por_nivel:           'Piso — por nivel de diferencia',
+  orientacion_sur_vs_norte: 'Orientación — sur vs norte',
+  orientacion_interno:      'Orientación — interno',
+  distribucion_mala:        'Distribución — regular vs buena',
+  oferta_mas_de_un_anio:    'Oferta — más de 12 meses en mercado',
+  oferta_menos_de_un_anio:  'Oferta — menos de 12 meses en mercado',
+  oportunidad_mercado:      'Oportunidad de mercado',
+  cochera:                  'Cochera',
+  pileta:                   'Pileta',
 }
 
-const EMPTY_MODIFIER = { factor_key: 'factor_calidad', option_label: '', factor_value: '1.00' }
+const EMPTY_MODIFIER = { factor_key: 'calidad_superior', option_label: '', factor_value: '1.00' }
 
 function ModifiersPanel() {
   const [modifiers, setModifiers] = useState([])
@@ -756,6 +756,10 @@ function ModifiersPanel() {
     if (items.length) acc.push({ key, label, items })
     return acc
   }, [])
+  // Include any modifiers whose key isn't in FACTOR_KEY_LABELS
+  const knownKeys = new Set(Object.keys(FACTOR_KEY_LABELS))
+  const ungrouped = modifiers.filter((m) => !knownKeys.has(m.factor_key))
+  if (ungrouped.length) grouped.push({ key: '__other__', label: 'Otros', items: ungrouped })
 
   return (
     <div>
