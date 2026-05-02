@@ -76,9 +76,11 @@ export default function AgregarComparables() {
   const [submitting, setSubmitting] = useState(false)
   const [apiError, setApiError] = useState(null)
   const [extracting, setExtracting] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [extractError, setExtractError] = useState(null)
   const [extractPreview, setExtractPreview] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const retryTimerRef = React.useRef(null)
   const [pageReady, setPageReady] = useState(false)
   const { dispatch } = useWizard()
   const navigate = useNavigate()
@@ -87,7 +89,6 @@ export default function AgregarComparables() {
     getACM(id).then((acm) => {
       setComparables(acm.comparables)
       dispatch({ type: 'SET_ACM_ID', payload: acm.id })
-      // Show form immediately only when there are no comparables yet
       setShowForm(acm.comparables.length === 0)
       setPageReady(true)
     })
@@ -101,8 +102,9 @@ export default function AgregarComparables() {
   function validate(v) {
     const err = {}
     if (!v.precio || Number(v.precio) <= 0) err.precio = 'Requerido'
-    if (!v.superficie_cubierta || Number(v.superficie_cubierta) <= 0)
+    if (!v.superficie_cubierta || Number(v.superficie_cubierta) <= 0) {
       err.superficie_cubierta = 'Debe ser mayor a 0'
+    }
     return err
   }
 
@@ -113,14 +115,18 @@ export default function AgregarComparables() {
   async function handleExtract() {
     if (!form.url || !isSupportedUrl) return
     setExtracting(true)
+    setRetrying(false)
     setExtractError(null)
+    retryTimerRef.current = setTimeout(() => setRetrying(true), 10_000)
     try {
       const data = await extractProperty(form.url)
       setExtractPreview(data)
     } catch (e) {
       setExtractError(e.message)
     } finally {
+      clearTimeout(retryTimerRef.current)
       setExtracting(false)
+      setRetrying(false)
     }
   }
 
@@ -142,7 +148,10 @@ export default function AgregarComparables() {
   async function handleSubmit(e) {
     e.preventDefault()
     const err = validate(form)
-    if (Object.keys(err).length) { setErrors(err); return }
+    if (Object.keys(err).length) {
+      setErrors(err)
+      return
+    }
     setSubmitting(true)
     setApiError(null)
     try {
@@ -210,33 +219,16 @@ export default function AgregarComparables() {
 
   return (
     <div>
-      <SmartLoader loading={extracting} logoSrc={logoSrc} />
+      <SmartLoader loading={extracting} logoSrc={logoSrc} message={retrying ? 'Reintentando extracción...' : undefined} />
       <WizardNav currentStep={2} />
-      <div className="step-header">
-        <div className="step-header__content">
-          <div className="step-header__copy">
-            <span className="page-eyebrow">Paso 2</span>
-            <h1>Agregar comparables</h1>
-            <p>Armá la base de mercado del análisis con publicaciones confiables, extracción asistida y una muestra lista para ponderar.</p>
-          </div>
 
-          <div className="step-header__signals">
-            <article className="step-header__signal">
-              <span className="step-header__signal-label">Base activa</span>
-              <strong>{comparables.length} comparable{comparables.length === 1 ? '' : 's'}</strong>
-              <p>{comparables.length > 0 ? 'Ya tenés mercado cargado para avanzar al paso 3 cuando quieras.' : 'Todavía no hay muestra cargada. Empezá con una publicación o una carga manual.'}</p>
-            </article>
-
-            <article className="step-header__signal">
-              <span className="step-header__signal-label">Extracción</span>
-              <strong>{currentSource || 'Zonaprop, Argenprop y Mercado Libre'}</strong>
-              <p>{currentSource ? 'La publicación actual se puede leer y usar para completar el formulario más rápido.' : 'Pegá una URL soportada para extraer precio, superficie, dirección y otros datos base.'}</p>
-            </article>
-          </div>
-        </div>
+      <div className="step-header step-header--compact">
+        <span className="page-eyebrow">Paso 2</span>
+        <h1>Agregar comparables</h1>
+        <p>Construí la base de mercado con publicaciones útiles, extracción asistida y una lectura clara antes de pasar a ponderadores.</p>
       </div>
 
-      <div className="workflow-layout">
+      <div className="workflow-layout workflow-layout--single">
         <div className="workflow-main">
           {apiError && <div className="alert alert-error">{apiError}</div>}
 
@@ -244,17 +236,17 @@ export default function AgregarComparables() {
             <article className="workflow-stat-card">
               <span className="workflow-stat-card__label">Comparables cargadas</span>
               <strong>{comparables.length}</strong>
-              <p>{comparables.length > 0 ? 'Muestra activa en revisión.' : 'Pendiente de base inicial.'}</p>
+              <p>{comparables.length > 0 ? 'Muestra activa para revisar.' : 'Todavía no hay base inicial.'}</p>
             </article>
             <article className="workflow-stat-card">
               <span className="workflow-stat-card__label">Portales soportados</span>
               <strong>{SUPPORTED_SOURCES.length}</strong>
-              <p>Extracción disponible para Zonaprop, Argenprop y Mercado Libre.</p>
+              <p>{currentSource ? `Detectamos ${currentSource}.` : 'Zonaprop, Argenprop y Mercado Libre.'}</p>
             </article>
             <article className="workflow-stat-card">
-              <span className="workflow-stat-card__label">Próximo destino</span>
-              <strong>{comparables.length > 0 ? 'Paso 3 habilitado' : 'Esperando muestra mínima'}</strong>
-              <p>{comparables.length > 0 ? 'Podés pasar a ponderadores cuando termines de revisar la base.' : 'Necesitás al menos una comparable para continuar con ajustes.'}</p>
+              <span className="workflow-stat-card__label">Paso siguiente</span>
+              <strong>{comparables.length > 0 ? 'Ponderadores listos' : 'Esperando muestra mínima'}</strong>
+              <p>{comparables.length > 0 ? 'Podés seguir al paso 3 cuando cierres esta base.' : 'Necesitás al menos una comparable para continuar.'}</p>
             </article>
           </section>
 
@@ -267,12 +259,13 @@ export default function AgregarComparables() {
                 </div>
               </div>
               <div className="table-wrapper">
-                <table className="workspace-table">
+                <table className="workspace-table workspace-table--comparables">
                   <thead>
                     <tr>
                       <th>#</th>
                       <th>Comparable</th>
                       <th>Fuente</th>
+                      <th>Mercado</th>
                       <th>Precio USD</th>
                       <th>Sup. hom. m²</th>
                       <th>USD/m²</th>
@@ -286,30 +279,41 @@ export default function AgregarComparables() {
                       const source = sourceLabel(c.url)
                       return (
                         <tr key={c.id}>
-                          <td>{i + 1}</td>
+                          <td className="workspace-table__index">{i + 1}</td>
                           <td className="workspace-table__cell-ellipsis">
-                            <div className="workspace-table__primary">
+                            <div className="workspace-table__primary workspace-table__primary--comparable">
                               <strong>{comparableLabel(c, i)}</strong>
-                              {c.direccion && source && <span>{source}</span>}
+                              <span>{c.tipo || 'Tipo sin definir'} · {h.toFixed(1)} m² hom.</span>
                             </div>
                           </td>
                           <td>
-                            {c.url ? (
-                              <a
-                                href={c.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="workspace-table__link"
-                              >
-                                {source || 'Abrir fuente'} ↗
-                              </a>
-                            ) : 'Manual'}
+                            <span className={`workspace-pill${c.url ? '' : ' workspace-pill--muted'}`}>
+                              {source || 'Manual'}
+                            </span>
+                          </td>
+                          <td>
+                            {c.dias_mercado
+                              ? `${c.dias_mercado} días`
+                              : c.oportunidad_mercado
+                                ? 'Oportunidad'
+                                : 'Sin dato'}
                           </td>
                           <td>USD {c.precio.toLocaleString('es-AR')}</td>
                           <td>{h.toFixed(1)} m²</td>
-                          <td>USD {Math.round(pm2).toLocaleString('es-AR')}</td>
+                          <td><strong>USD {Math.round(pm2).toLocaleString('es-AR')}</strong></td>
                           <td>
                             <div className="table-actions">
+                              {c.url && (
+                                <a
+                                  href={c.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-secondary btn-sm workspace-link-action"
+                                  title="Abrir publicación"
+                                >
+                                  Ver publicación ↗
+                                </a>
+                              )}
                               <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(c)}>Editar</button>
                               <button className="btn btn-danger btn-sm" onClick={() => handleDelete(c.id)}>×</button>
                             </div>
@@ -338,19 +342,26 @@ export default function AgregarComparables() {
                 <div className="form-grid">
                   <div className="form-group full">
                     <label>URL de publicación</label>
-                    <div className="inline-control-row">
-                      <input type="url" name="url" value={form.url} tabIndex={1}
+                    <div className="inline-control-row inline-control-row--url">
+                      <input
+                        type="url"
+                        name="url"
+                        value={form.url}
+                        tabIndex={1}
                         onChange={(e) => { handleChange('url', e.target.value); setExtractError(null) }}
-                        placeholder="https://www.zonaprop.com.ar/, argenprop.com o mercadolibre.com.ar/..." />
+                        placeholder="https://www.zonaprop.com.ar/, argenprop.com o mercadolibre.com.ar/..."
+                      />
                       {form.url && (
                         <a
                           href={form.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="btn btn-secondary btn-sm"
+                          className="input-link-action"
                           tabIndex={-1}
+                          aria-label="Abrir publicación"
+                          title="Abrir publicación"
                         >
-                          Abrir
+                          ↗
                         </a>
                       )}
                       {isSupportedUrl && (
@@ -360,10 +371,13 @@ export default function AgregarComparables() {
                           onClick={handleExtract}
                           disabled={extracting}
                         >
-                          {extracting ? 'Extrayendo...' : 'Extraer datos'}
+                          {retrying ? 'Reintentando...' : extracting ? 'Extrayendo...' : 'Extraer datos'}
                         </button>
                       )}
                     </div>
+                    {currentSource && (
+                      <div className="workflow-inline-meta">Fuente detectada: <strong>{currentSource}</strong></div>
+                    )}
                     {extractError && (
                       <div className="alert alert-error" style={{ marginTop: 6, fontSize: 13 }}>
                         {extractError}
@@ -372,27 +386,50 @@ export default function AgregarComparables() {
                   </div>
                   <div className="form-group full">
                     <label>Dirección</label>
-                    <input type="text" name="direccion" value={form.direccion} tabIndex={2}
+                    <input
+                      type="text"
+                      name="direccion"
+                      value={form.direccion}
+                      tabIndex={2}
                       onChange={(e) => handleChange('direccion', e.target.value)}
-                      placeholder="Ej: Av. Corrientes 1234" />
+                      placeholder="Ej: Av. Corrientes 1234"
+                    />
                   </div>
                   <div className="form-group">
                     <label>Precio publicado (USD) *</label>
-                    <input type="number" name="precio" min="1" step="1" tabIndex={3}
-                      value={form.precio} onChange={(e) => handleChange('precio', e.target.value)} />
+                    <input
+                      type="number"
+                      name="precio"
+                      min="1"
+                      step="1"
+                      tabIndex={3}
+                      value={form.precio}
+                      onChange={(e) => handleChange('precio', e.target.value)}
+                    />
                     {errors.precio && <span className="error-msg">{errors.precio}</span>}
                   </div>
                   <div className="form-group">
                     <label>Días en el mercado</label>
-                    <input type="number" name="dias_mercado" min="0" step="1" tabIndex={4}
-                      value={form.dias_mercado} onChange={(e) => handleChange('dias_mercado', e.target.value)} />
+                    <input
+                      type="number"
+                      name="dias_mercado"
+                      min="0"
+                      step="1"
+                      tabIndex={4}
+                      value={form.dias_mercado}
+                      onChange={(e) => handleChange('dias_mercado', e.target.value)}
+                    />
                   </div>
                   <div className="form-group full">
                     <label>Oportunidad de mercado</label>
                     <div className="checkbox-row">
                       <label className="checkbox-row__label">
-                        <input type="checkbox" tabIndex={5} checked={form.oportunidad_mercado}
-                          onChange={(e) => handleChange('oportunidad_mercado', e.target.checked)} />
+                        <input
+                          type="checkbox"
+                          tabIndex={5}
+                          checked={form.oportunidad_mercado}
+                          onChange={(e) => handleChange('oportunidad_mercado', e.target.checked)}
+                        />
                         Precio competitivo (aplica ×0.95)
                       </label>
                     </div>
@@ -425,42 +462,11 @@ export default function AgregarComparables() {
             </div>
           )}
         </div>
-
-        <aside className="workflow-aside">
-          <div className="card workflow-card workflow-card--compact">
-            <div className="section-heading">
-              <div>
-                <span className="section-heading__eyebrow">Fuentes</span>
-                <h2>Portales compatibles</h2>
-              </div>
-            </div>
-            <ul className="workflow-checklist">
-              <li>Zonaprop para extracción directa de precio y superficie.</li>
-              <li>Argenprop para ampliar la muestra con otra señal de mercado.</li>
-              <li>Mercado Libre para validar publicaciones activas adicionales.</li>
-            </ul>
-          </div>
-
-          <div className="card workflow-card">
-            <div className="section-heading">
-              <div>
-                <span className="section-heading__eyebrow">Criterio</span>
-                <h2>Antes del paso 3</h2>
-              </div>
-            </div>
-            <ul className="workflow-checklist">
-              <li>Revisá que precio y superficie base sean coherentes.</li>
-              <li>Combiná extracción automática con edición manual cuando haga falta.</li>
-              <li>Sumá al menos una comparable válida para habilitar ponderadores.</li>
-            </ul>
-          </div>
-        </aside>
       </div>
 
       <div className="btn-group btn-group--workspace">
         <button className="btn btn-secondary" onClick={() => navigate(`/acm/${id}/step/1`)}>← Paso 1</button>
-        <button className="btn btn-primary" disabled={comparables.length === 0}
-          onClick={() => navigate(`/acm/${id}/step/3`)}>
+        <button className="btn btn-primary" disabled={comparables.length === 0} onClick={() => navigate(`/acm/${id}/step/3`)}>
           Continuar → Paso 3
         </button>
       </div>

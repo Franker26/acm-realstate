@@ -22,6 +22,7 @@ import AdminDashboard from './pages/admin/AdminDashboard.jsx'
 import AdminCompanyDetail from './pages/admin/AdminCompanyDetail.jsx'
 import AdminSettings from './pages/admin/AdminSettings.jsx'
 import NotFound from './pages/NotFound.jsx'
+import FloatingCalculator from './components/FloatingCalculator.jsx'
 import { getBrandingSettings, getCurrentUser, loginUser } from './api.js'
 
 // --- Auth ---
@@ -139,9 +140,14 @@ const STEPS = [
 
 function WizardNavInner({ currentStep }) {
   const { state } = useWizard()
+  const { user } = useAuth()
+  const location = useLocation()
   const navigate = useNavigate()
   const acmId = state.acmId
   const progress = Math.round((currentStep / STEPS.length) * 100)
+  const appName = getSavedAppName()
+  const logo = getSavedLogo()
+  const currentPath = location.pathname
 
   function goToStep(num) {
     if (!acmId) return
@@ -152,15 +158,42 @@ function WizardNavInner({ currentStep }) {
   return (
     <section className="wizard-shell" aria-label="Pipeline de confección">
       <div className="wizard-shell__header">
-        <div>
-          <span className="wizard-shell__eyebrow">Pipeline</span>
-          <strong>Confección de tasación</strong>
-        </div>
-        <div className="wizard-shell__progress" aria-label={`Progreso ${progress}%`}>
-          <span>{currentStep} de {STEPS.length}</span>
-          <div className="wizard-shell__progress-track" aria-hidden="true">
-            <div className="wizard-shell__progress-fill" style={{ width: `${progress}%` }} />
+        <div className="wizard-shell__header-main">
+          <button type="button" className="wizard-shell__back" onClick={() => navigate('/')}>
+            ← Dashboard
+          </button>
+          <div className="wizard-shell__brand">
+            <span className="wizard-shell__brand-mark">
+              {logo ? (
+                <img src={logo} alt={`${appName} logo`} className="wizard-shell__brand-logo" />
+              ) : (
+                <span>{appName.slice(0, 1).toUpperCase()}</span>
+              )}
+            </span>
+            <div>
+              <span className="wizard-shell__eyebrow">Pipeline</span>
+              <strong>Confección de tasación</strong>
+            </div>
           </div>
+        </div>
+        <div className="wizard-shell__header-side">
+          <div className="wizard-shell__progress" aria-label={`Progreso ${progress}%`}>
+            <span>{currentStep} de {STEPS.length}</span>
+            <div className="wizard-shell__progress-track" aria-hidden="true">
+              <div className="wizard-shell__progress-fill" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+          {user && (
+            <div className="wizard-shell__user">
+              <div className="wizard-shell__user-avatar">
+                {user.username.slice(0, 1).toUpperCase()}
+              </div>
+              <div className="wizard-shell__user-copy">
+                <strong>{user.username}</strong>
+                <span>{currentPath.includes('/step/') ? `Paso ${currentStep}` : 'Workspace'}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -236,6 +269,7 @@ function AppHeader() {
   const isHomeRoute = location.pathname === '/'
   const isApprovalsRoute = location.pathname === '/approvals'
   const isSettingsRoute = location.pathname === '/settings'
+  const isWorkflowRoute = location.pathname.startsWith('/acm/')
 
   const navItems = [
     { to: '/', label: 'Tablero', visible: true },
@@ -244,7 +278,7 @@ function AppHeader() {
   ].filter((item) => item.visible)
 
   return (
-    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
+    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute || isWorkflowRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
       <div className="app-header__shell">
         <div className="app-header__left">
           <Link to="/" className="app-title">
@@ -398,6 +432,7 @@ export default function App() {
           <main className="app-main">
             <AppRoutes />
           </main>
+          <FloatingCalculator />
         </WizardProvider>
       </AuthProvider>
     </BrowserRouter>

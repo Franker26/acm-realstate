@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, updateACM } from '../api.js'
 import { useAuth, useWizard } from '../App.jsx'
-import { MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
+import { LoadingState, MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
 import { getSavedAppName, getSavedLogo } from '../theme.js'
 
 const COLUMNS = [
@@ -101,6 +101,10 @@ export default function Home() {
   const [quickDraft, setQuickDraft] = useState({ nombre: '', direccion: '' })
   const [quickErrors, setQuickErrors] = useState({})
   const [routeTransition, setRouteTransition] = useState(null)
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth <= 820
+  })
   const [logo, setLogo] = useState(() => getSavedLogo())
   const [appName, setAppName] = useState(() => getSavedAppName())
   const { dispatch } = useWizard()
@@ -138,6 +142,15 @@ export default function Home() {
     }
     window.addEventListener('acm_theme_changed', onThemeChange)
     return () => window.removeEventListener('acm_theme_changed', onThemeChange)
+  }, [])
+
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth <= 820)
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   const grouped = useMemo(() => {
@@ -270,7 +283,7 @@ export default function Home() {
     navigate('/login')
   }
 
-  if (routeTransition) {
+  if (isMobile && routeTransition) {
     return (
       <MobileWorkspaceLoading
         eyebrow="Cambiando de vista"
@@ -364,17 +377,27 @@ export default function Home() {
   return (
     <div>
       {loading && (
-        <MobileWorkspaceLoading
-          eyebrow="Carga de panel"
-          title="Estamos preparando el dashboard"
-          subtitle="Sincronizamos tasaciones, métricas y etapas del equipo para que el tablero abra listo en mobile."
-          messages={['Cargando tablero...', 'Preparando workspace...', 'Sincronizando datos...']}
-          metrics={[
-            { label: 'Vista', value: 'Mobile' },
-            { label: 'Flujo', value: 'ACMs' },
-            { label: 'Estado', value: 'Sync' },
-          ]}
-        />
+        isMobile ? (
+          <MobileWorkspaceLoading
+            eyebrow="Carga de panel"
+            title="Estamos preparando el dashboard"
+            subtitle="Sincronizamos tasaciones, métricas y etapas del equipo para que el tablero abra listo en mobile."
+            messages={['Cargando tablero...', 'Preparando workspace...', 'Sincronizando datos...']}
+            metrics={[
+              { label: 'Vista', value: 'Mobile' },
+              { label: 'Flujo', value: 'ACMs' },
+              { label: 'Estado', value: 'Sync' },
+            ]}
+          />
+        ) : (
+          <LoadingState
+            eyebrow="Cargando dashboard"
+            title="Preparamos el tablero operativo"
+            subtitle="Sincronizamos tasaciones, métricas y etapas del equipo."
+            messages={['Cargando tablero...', 'Preparando workspace...', 'Sincronizando datos...']}
+            step="Dashboard"
+          />
+        )
       )}
 
       {error && !loading && (

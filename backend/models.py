@@ -2,6 +2,9 @@ import enum
 import os
 from datetime import datetime
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from sqlalchemy import (
     Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, create_engine
 )
@@ -224,3 +227,18 @@ class PlatformSetting(Base):
 
     key = Column(String, primary_key=True)
     value = Column(String, nullable=True)
+
+
+class ModifierOption(Base):
+    """Per-company configuration of qualifier options and their adjustment factors."""
+    __tablename__ = "modifier_options"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    factor_key = Column(String, nullable=False)
+    option_label = Column(String, nullable=False)
+    factor_value = Column(Float, nullable=False, default=1.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    company = relationship("Company")
